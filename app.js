@@ -259,12 +259,8 @@ const dataOps = {
     async loadItems(listId) {
         const allItems = await db.getAll(STORES.items);
         appState.items = allItems.filter(item => item.listId === listId);
-        appState.items.sort((a, b) => {
-            if (a.inShoppingList === b.inShoppingList) {
-                return a.name.localeCompare(b.name);
-            }
-            return a.inShoppingList ? -1 : 1;
-        });
+        // Sort alphabetically by name
+        appState.items.sort((a, b) => a.name.localeCompare(b.name, 'es-ES'));
     },
 
     async loadSettings() {

@@ -76,8 +76,10 @@ lista-de-la-compra/
 let appState = {
     currentListId: null,
     currentFilter: 'all',
+    currentView: 'lists', // 'lists', 'items', 'stats', 'products'
     lists: [],
     items: [],
+    allProducts: [], // Todos los productos de todas las listas
     settings: {},
     history: [],
     db: null
@@ -99,6 +101,13 @@ db.getAll(), db.get(), db.add(), db.put(), db.delete()
 - NUNCA acceder a IndexedDB directamente fuera de `db.js` (aquí está en `app.js`)
 - SIEMPRER esperar a que `db.open()` se complete antes de cualquier operación
 - Manejar SIEMPRE los errores de IndexedDB
+
+**Stores en IndexedDB:**
+- `lists` - Listas de compra
+- `items` - Productos/ítems
+- `settings` - Configuración de la app
+- `history` - Historial de compras
+- `priceHistory` - Historial de precios de productos
 
 ## 5. Renderizado
 
@@ -297,7 +306,39 @@ npx lighthouse http://localhost:8080 --view
 # DevTools > Application > Clear storage > Clear site data
 ```
 
-## 20. Contacto y Soporte
+## 20. Funcionalidades Específicas
+
+### Vista de "Todos los Productos"
+- **ID HTML**: `productsView`
+- **Botón de acceso**: `productsBtn` (icono de lista en header)
+- **Función**: `navigation.showProductsView()`
+- Muestra todos los productos de todas las listas en tarjetas
+- Cada tarjeta incluye: nombre, precio, % cambio, lista origen
+- Incluye buscador por nombre de producto o lista
+- Botones: "Historial" y "Editar precio"
+
+### Historial de Precios
+- **Store IndexedDB**: `priceHistory`
+- **Modal ID**: `priceHistoryModal`
+- **Funciones**:
+  - `dataOps.getPriceHistory(itemName)` - Obtiene historial
+  - `dataOps.savePriceToHistory(item, oldPrice, newPrice)` - Guarda cambio
+  - `dataOps.calculatePriceChange(current, previous)` - Calcula %
+  - `dataOps.updateItemPrice(item, newPrice)` - Actualiza precio
+- Se guarda automáticamente al cambiar el precio de un producto
+- Indicadores visuales: ↑ rojo (subió), ↓ verde (bajó)
+
+### IDs HTML Importantes (Nuevos)
+- `productsBtn` - Botón header para ver todos los productos
+- `productsView` - Vista de catálogo de productos
+- `productsSearch` - Buscador de productos
+- `productsList` - Contenedor de tarjetas de productos
+- `priceHistoryModal` - Modal de historial de precios
+- `currentPriceInput` - Input de precio actual
+- `savePriceBtn` - Botón guardar precio
+- `priceHistoryList` - Lista de historial
+
+## 21. Contacto y Soporte
 
 - Revisar `README.md` para documentación de usuario
 - Para bugs: reproducir paso a paso antes de reportar
@@ -306,4 +347,4 @@ npx lighthouse http://localhost:8080 --view
 ---
 
 **Última actualización**: Abril 2026
-**Versión**: 1.0.0
+**Versión**: 1.1.0 (con historial de precios)

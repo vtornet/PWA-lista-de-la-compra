@@ -320,11 +320,11 @@ const dataOps = {
         const item = {
             id: utils.generateId(),
             name: itemData.name,
-            listId: appState.currentListId,
-            inShoppingList: true,
+            listId: itemData.listId || appState.currentListId,
+            inShoppingList: itemData.inShoppingList !== undefined ? itemData.inShoppingList : true,
             imageUrl: itemData.imageUrl || null,
             price: itemData.price || null,
-            previousPrice: null,
+            previousPrice: itemData.previousPrice || null,
             quantity: itemData.quantity || 1,
             createdAt: Date.now(),
             updatedAt: Date.now()

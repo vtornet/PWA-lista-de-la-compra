@@ -3,12 +3,13 @@
 // ============================================
 
 const DB_NAME = 'ShoppingListDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented for new store
 const STORES = {
     lists: 'lists',
     items: 'items',
     settings: 'settings',
-    history: 'history'
+    history: 'history',
+    priceHistory: 'priceHistory'
 };
 
 const STORAGE_KEYS = {
@@ -165,6 +166,13 @@ const db = {
                     const historyStore = db.createObjectStore(STORES.history, { keyPath: 'id' });
                     historyStore.createIndex('listId', 'listId', { unique: false });
                     historyStore.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+
+                // Create price history store
+                if (!db.objectStoreNames.contains(STORES.priceHistory)) {
+                    const priceHistoryStore = db.createObjectStore(STORES.priceHistory, { keyPath: 'id' });
+                    priceHistoryStore.createIndex('itemName', 'itemName', { unique: false });
+                    priceHistoryStore.createIndex('timestamp', 'timestamp', { unique: false });
                 }
             };
         });
@@ -496,11 +504,11 @@ const dataOps = {
 
     async clearAllData() {
         const transaction = appState.db.transaction(
-            [STORES.lists, STORES.items, STORES.settings, STORES.history],
+            [STORES.lists, STORES.items, STORES.settings, STORES.history, STORES.priceHistory],
             'readwrite'
         );
 
-        for (const storeName of [STORES.lists, STORES.items, STORES.history]) {
+        for (const storeName of [STORES.lists, STORES.items, STORES.history, STORES.priceHistory]) {
             transaction.objectStore(storeName).clear();
         }
 
@@ -515,6 +523,93 @@ const dataOps = {
             };
             transaction.onerror = () => reject(transaction.error);
         });
+    },
+
+    // Load all products from all lists
+    async loadAllProducts() {
+        const allItems = await db.getAll(STORES.items);
+        const products = [];
+
+        for (const item of allItems) {
+            const list = appState.lists.find(l => l.id === item.listId);
+            if (!list) continue;
+
+            // Get price history for this product
+            const priceHistory = await this.getPriceHistory(item.name);
+
+            products.push({
+                ...item,
+                listName: list.name,
+                listId: item.listId,
+                priceHistory: priceHistory
+            });
+        }
+
+        // Sort alphabetically by name
+        products.sort((a, b) => a.name.localeCompare(b.name, 'es-ES'));
+
+        return products;
+    },
+
+    // Get price history for a product
+    async getPriceHistory(itemName) {
+        const allHistory = await db.getAll(STORES.priceHistory);
+        return allHistory
+            .filter(h => h.itemName === itemName)
+            .sort((a, b) => b.timestamp - a.timestamp); // Most recent first
+    },
+
+    // Save price to history when updating item price
+    async savePriceToHistory(item, oldPrice, newPrice) {
+        if (!oldPrice || oldPrice === newPrice) return;
+
+        const historyEntry = {
+            id: utils.generateId(),
+            itemName: item.name,
+            listId: item.listId,
+            oldPrice: oldPrice,
+            newPrice: newPrice,
+            timestamp: Date.now()
+        };
+
+        await db.add(STORES.priceHistory, historyEntry);
+    },
+
+    // Update item price and save to history
+    async updateItemPrice(item, newPrice) {
+        const oldPrice = item.price;
+
+        if (oldPrice !== newPrice) {
+            // Save to history if price changed
+            if (oldPrice && oldPrice !== newPrice) {
+                await this.savePriceToHistory(item, oldPrice, newPrice);
+            }
+
+            // Update previousPrice
+            item.previousPrice = oldPrice;
+            item.price = newPrice;
+            item.updatedAt = Date.now();
+
+            await db.put(STORES.items, item);
+
+            // Update in appState.items if present
+            const index = appState.items.findIndex(i => i.id === item.id);
+            if (index !== -1) {
+                appState.items[index] = item;
+            }
+        }
+    },
+
+    // Calculate price change percentage
+    calculatePriceChange(current, previous) {
+        if (!current || !previous) return null;
+
+        const change = ((current - previous) / previous) * 100;
+        return {
+            percentage: Math.abs(change).toFixed(1),
+            direction: change > 0 ? 'up' : change < 0 ? 'down' : 'same',
+            isPositive: change < 0 // Lower price is positive for consumer
+        };
     }
 };
 
@@ -527,6 +622,7 @@ const navigation = {
         appState.currentView = 'lists';
         document.getElementById('listsView').classList.add('active');
         document.getElementById('itemsView').classList.remove('active');
+        document.getElementById('productsView').classList.remove('active');
         document.getElementById('statsView').classList.remove('active');
         document.getElementById('appTitle').textContent = 'Mis Listas';
     },
@@ -535,6 +631,7 @@ const navigation = {
         appState.currentView = 'items';
         document.getElementById('listsView').classList.remove('active');
         document.getElementById('itemsView').classList.add('active');
+        document.getElementById('productsView').classList.remove('active');
         document.getElementById('statsView').classList.remove('active');
     },
 
@@ -542,7 +639,24 @@ const navigation = {
         appState.currentView = 'stats';
         document.getElementById('listsView').classList.remove('active');
         document.getElementById('itemsView').classList.remove('active');
+        document.getElementById('productsView').classList.remove('active');
         document.getElementById('statsView').classList.add('active');
+    },
+
+    async showProductsView() {
+        appState.currentView = 'products';
+        await dataOps.loadLists();
+        const products = await dataOps.loadAllProducts();
+
+        appState.allProducts = products;
+
+        document.getElementById('listsView').classList.remove('active');
+        document.getElementById('itemsView').classList.remove('active');
+        document.getElementById('statsView').classList.remove('active');
+        document.getElementById('productsView').classList.add('active');
+        document.getElementById('appTitle').textContent = 'Productos';
+
+        ui.renderProducts(products);
     },
 
     async openList(listId) {
@@ -558,6 +672,162 @@ const navigation = {
         ui.renderItems();
     }
 };
+
+// ============================================
+// PRICE HISTORY MODAL
+// ============================================
+
+let currentPriceHistoryItem = null;
+
+async function openPriceHistoryModal(itemId) {
+    const products = appState.allProducts || [];
+    const product = products.find(p => p.id === itemId) || appState.items.find(i => i.id === itemId);
+
+    if (!product) return;
+
+    currentPriceHistoryItem = product;
+
+    // Get price history
+    const priceHistory = product.priceHistory || await dataOps.getPriceHistory(product.name);
+
+    // Update modal title
+    document.getElementById('priceHistoryTitle').textContent = product.name;
+
+    // Set current price input
+    const priceInput = document.getElementById('currentPriceInput');
+    priceInput.value = product.price || '';
+
+    // Update price change info
+    updatePriceChangeInfo(product);
+
+    // Render price history list
+    renderPriceHistoryList(priceHistory, product.price);
+
+    // Show modal
+    document.getElementById('priceHistoryModal').classList.add('open');
+}
+
+function updatePriceChangeInfo(product) {
+    const infoDiv = document.getElementById('priceChangeInfo');
+
+    if (!product.price || !product.previousPrice) {
+        infoDiv.innerHTML = `
+            <svg class="price-change-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 16v-4M12 8h.01"/>
+            </svg>
+            <span class="price-change-text">Sin historial de precios previo</span>
+        `;
+        return;
+    }
+
+    const change = dataOps.calculatePriceChange(product.price, product.previousPrice);
+
+    if (!change) {
+        infoDiv.innerHTML = `<span class="price-change-text">Precio sin cambios</span>`;
+        return;
+    }
+
+    const iconSvg = change.direction === 'up' ?
+        '<path d="M12 19V5M5 12l7-7 7 7"/>' :
+        change.direction === 'down' ?
+        '<path d="M12 5v14M19 12l-7 7-7-7"/>' :
+        '<circle cx="12" cy="12" r="1"/>';
+
+    const directionText = change.direction === 'up' ? 'Ha subido' :
+                        change.direction === 'down' ? 'Ha bajado' : 'Sin cambios';
+
+    infoDiv.innerHTML = `
+        <svg class="price-change-icon ${change.direction === 'down' ? 'up' : change.direction === 'up' ? 'down' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            ${iconSvg}
+        </svg>
+        <div class="price-change-text">
+            <span>${directionText} desde </span>
+            <strong>${utils.formatPrice(product.previousPrice)}</strong>
+            <span class="price-change-percentage ${change.isPositive ? 'positive' : 'negative'}">
+                (${change.percentage}%)
+            </span>
+        </div>
+    `;
+}
+
+function renderPriceHistoryList(history, currentPrice) {
+    const container = document.getElementById('priceHistoryList');
+
+    if (!history || history.length === 0) {
+        container.innerHTML = `
+            <div class="price-history-empty">
+                <p>No hay historial de precios aún</p>
+                <p class="text-secondary text-sm">Los cambios de precio se guardarán automáticamente aquí</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = history.map((entry, index) => {
+        const change = index < history.length - 1 ?
+            dataOps.calculatePriceChange(entry.newPrice, history[index + 1]?.newPrice || entry.oldPrice) :
+            null;
+
+        const changeHtml = change ?
+            `<span class="price-history-change ${change.isPositive ? 'positive' : 'negative'}">
+                ${change.direction === 'up' ? '↑' : change.direction === 'down' ? '↓' : '→'} ${change.percentage}%
+            </span>` : '';
+
+        return `
+            <div class="price-history-item">
+                <span class="price-history-date">${utils.formatDateTime(entry.timestamp)}</span>
+                <span class="price-history-price">${utils.formatPrice(entry.newPrice)}</span>
+                ${changeHtml}
+            </div>
+        `;
+    }).join('');
+}
+
+async function savePriceFromModal() {
+    if (!currentPriceHistoryItem) return;
+
+    const priceInput = document.getElementById('currentPriceInput');
+    const newPrice = parseFloat(priceInput.value) || null;
+
+    // Find the item in the original list
+    const allItems = await db.getAll(STORES.items);
+    const item = allItems.find(i => i.id === currentPriceHistoryItem.id);
+
+    if (item) {
+        await dataOps.updateItemPrice(item, newPrice);
+
+        // Update the current item
+        currentPriceHistoryItem.price = newPrice;
+        currentPriceHistoryItem.previousPrice = item.previousPrice;
+
+        // Refresh modal
+        const updatedHistory = await dataOps.getPriceHistory(item.name);
+        currentPriceHistoryItem.priceHistory = updatedHistory;
+        updatePriceChangeInfo(currentPriceHistoryItem);
+        renderPriceHistoryList(updatedHistory, newPrice);
+
+        // Refresh products view if active
+        if (appState.currentView === 'products') {
+            const products = await dataOps.loadAllProducts();
+            ui.renderProducts(products);
+        }
+
+        // Refresh items view if active
+        if (appState.currentView === 'items' && appState.currentListId === item.listId) {
+            await dataOps.loadItems(item.listId);
+            ui.renderItems();
+        }
+
+        utils.hapticFeedback();
+        ui.showToast('Precio actualizado', 'success');
+    }
+}
+
+function closePriceHistoryModal() {
+    document.getElementById('priceHistoryModal').classList.remove('open');
+    currentPriceHistoryItem = null;
+}
 
 // ============================================
 // UI RENDERERS
@@ -975,6 +1245,95 @@ const ui = {
         `).join('');
     },
 
+    renderProducts(products) {
+        const container = document.getElementById('productsList');
+        const emptyState = document.getElementById('emptyProductsState');
+
+        if (!container) return;
+
+        if (!products || products.length === 0) {
+            container.innerHTML = '';
+            emptyState.classList.remove('hidden');
+            return;
+        }
+
+        emptyState.classList.add('hidden');
+
+        container.innerHTML = products.map(product => this.renderProductCard(product)).join('');
+
+        // Attach event listeners
+        container.querySelectorAll('.product-card').forEach(card => {
+            const itemId = card.dataset.itemId;
+
+            // View history button
+            const historyBtn = card.querySelector('.view-history-btn');
+            if (historyBtn) {
+                historyBtn.addEventListener('click', () => {
+                    openPriceHistoryModal(itemId);
+                });
+            }
+
+            // Quick edit price button
+            const editPriceBtn = card.querySelector('.edit-price-btn');
+            if (editPriceBtn) {
+                editPriceBtn.addEventListener('click', () => {
+                    openPriceHistoryModal(itemId);
+                });
+            }
+        });
+    },
+
+    renderProductCard(product) {
+        const hasPrice = product.price !== null && product.price !== undefined;
+        const currentPrice = hasPrice ? product.price : null;
+        const previousPrice = product.previousPrice;
+
+        let priceChangeHtml = '';
+        if (hasPrice && previousPrice && previousPrice !== currentPrice) {
+            const change = dataOps.calculatePriceChange(currentPrice, previousPrice);
+            if (change) {
+                const arrow = change.direction === 'up' ? '↑' : change.direction === 'down' ? '↓' : '→';
+                const changeClass = change.isPositive ? 'positive' : !change.isPositive && change.direction !== 'same' ? 'negative' : 'neutral';
+                priceChangeHtml = `<span class="product-card-price-change ${changeClass}">${arrow} ${change.percentage}%</span>`;
+            }
+        }
+
+        return `
+            <div class="product-card" data-item-id="${product.id}">
+                <div class="product-card-header">
+                    <div class="product-card-info">
+                        <div class="product-card-name">${utils.escapeHtml(product.name)}</div>
+                        <div class="product-card-list">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                            </svg>
+                            ${utils.escapeHtml(product.listName)}
+                        </div>
+                    </div>
+                    <div class="product-card-price-section">
+                        <div class="product-card-price">${hasPrice ? utils.formatPrice(currentPrice) : 'Sin precio'}</div>
+                        ${priceChangeHtml}
+                    </div>
+                </div>
+                <div class="product-card-actions">
+                    <button class="product-card-btn view-history-btn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Historial
+                    </button>
+                    <button class="product-card-btn edit-price-btn primary">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                        Editar precio
+                    </button>
+                </div>
+            </div>
+        `;
+    },
+
     showToast(message, type = 'info') {
         const container = document.getElementById('toastContainer');
         const toast = document.createElement('div');
@@ -1331,6 +1690,17 @@ function setupEventListeners() {
     // Theme toggle
     document.getElementById('themeBtn').addEventListener('click', toggleTheme);
 
+    // Products view button
+    document.getElementById('productsBtn').addEventListener('click', () => {
+        navigation.showProductsView();
+    });
+
+    // Back from products
+    document.getElementById('backFromProducts').addEventListener('click', () => {
+        navigation.showListsView();
+        ui.renderListsGrid();
+    });
+
     // Back from items
     document.getElementById('backFromItems').addEventListener('click', () => {
         navigation.showListsView();
@@ -1590,6 +1960,21 @@ function setupEventListeners() {
     document.getElementById('shareAppBtn').addEventListener('click', shareViaApp);
     document.getElementById('downloadJsonBtn').addEventListener('click', downloadJson);
     document.getElementById('copyJsonBtn').addEventListener('click', copyJson);
+
+    // Products search
+    document.getElementById('productsSearch').addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const filteredProducts = (appState.allProducts || []).filter(p =>
+            p.name.toLowerCase().includes(searchTerm) ||
+            p.listName.toLowerCase().includes(searchTerm)
+        );
+        ui.renderProducts(filteredProducts);
+    });
+
+    // Price history modal
+    document.getElementById('priceHistoryModalOverlay').addEventListener('click', closePriceHistoryModal);
+    document.getElementById('closePriceHistoryModal').addEventListener('click', closePriceHistoryModal);
+    document.getElementById('savePriceBtn').addEventListener('click', savePriceFromModal);
 
     // Install banner
     document.getElementById('installBtn').addEventListener('click', promptInstall);

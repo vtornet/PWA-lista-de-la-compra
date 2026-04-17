@@ -26,6 +26,11 @@
                 </button>
                 <h1 class="app-title" id="appTitle">Mis Listas</h1>
                 <div class="header-actions">
+                    <button class="icon-btn" id="productsBtn" aria-label="Todos los productos">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 7h-9M20 11h-9M20 15h-9M3 7h2M3 11h2M3 15h2"/>
+                        </svg>
+                    </button>
                     <button class="icon-btn" id="themeBtn" aria-label="Cambiar tema">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="4"/>
@@ -64,6 +69,42 @@
                     </svg>
                     <p>No tienes listas aún</p>
                     <p class="empty-hint">Crea tu primera lista arriba</p>
+                </div>
+            </div>
+
+            <!-- Products View (Todos los productos) -->
+            <div id="productsView" class="view">
+                <button class="back-btn" id="backFromProducts">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Volver
+                </button>
+
+                <h2 class="view-title">Todos los Productos</h2>
+                <p class="view-subtitle">Consulta y edita precios de todos tus productos</p>
+
+                <!-- Search -->
+                <div class="search-bar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    <input type="text" id="productsSearch" class="search-input" placeholder="Buscar producto...">
+                </div>
+
+                <!-- Products List -->
+                <div class="products-list" id="productsList">
+                    <!-- Products will be rendered here -->
+                </div>
+
+                <!-- Empty State -->
+                <div class="empty-state" id="emptyProductsState">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                        <path d="M20 7h-9M20 11h-9M20 15h-9M3 7h2M3 11h2M3 15h2"/>
+                    </svg>
+                    <p>No hay productos en ninguna lista</p>
+                    <p class="empty-hint">Añade productos a tus listas para verlos aquí</p>
                 </div>
             </div>
 
@@ -449,6 +490,38 @@
                             </svg>
                             Copiar al portapapeles
                         </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Price History Modal -->
+        <div class="modal" id="priceHistoryModal">
+            <div class="modal-overlay" id="priceHistoryModalOverlay"></div>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="priceHistoryTitle">Historial de precios</h3>
+                    <button class="close-btn" id="closePriceHistoryModal" aria-label="Cerrar">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="current-price-section">
+                        <span class="current-price-label">Precio actual</span>
+                        <div class="current-price-row">
+                            <input type="number" id="currentPriceInput" class="price-input" min="0" step="0.01" placeholder="0.00">
+                            <span class="price-input-currency">€</span>
+                            <button class="btn btn-primary" id="savePriceBtn">Guardar</button>
+                        </div>
+                        <div class="price-change-info" id="priceChangeInfo">
+                            <!-- Price change info will be shown here -->
+                        </div>
+                    </div>
+                    <h4 class="history-title">Historial</h4>
+                    <div class="price-history-list" id="priceHistoryList">
+                        <!-- Price history will be rendered here -->
                     </div>
                 </div>
             </div>

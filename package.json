@@ -1,0 +1,23 @@
+{
+  "name": "lista-de-la-compra-pwa",
+  "version": "1.0.0",
+  "description": "PWA para gestionar listas de compra",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve -s . -p 8080",
+    "build": "echo 'No build step needed - vanilla JS'",
+    "test": "echo 'No tests configured'",
+    "lighthouse": "lighthouse http://localhost:8080 --view"
+  },
+  "keywords": [
+    "pwa",
+    "shopping-list",
+    "lista-compra",
+    "progressive-web-app"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}

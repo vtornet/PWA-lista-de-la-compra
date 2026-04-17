@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generar Iconos PWA</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        h1 {
+            color: #1e293b;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #4f46e5;
+        }
+        .icon-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .icon-item {
+            text-align: center;
+        }
+        .icon-item canvas {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        .icon-item p {
+            margin-top: 8px;
+            font-size: 14px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Generar Iconos para PWA</h1>
+        <p>Haz clic en el botón para generar y descargar todos los tamaños de iconos necesarios.</p>
+        <button onclick="generateAllIcons()">Generar todos los iconos</button>
+        <div id="status"></div>
+        <div class="icon-preview" id="preview"></div>
+    </div>
+
+    <script>
+        function generateIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#6366f1');
+            gradient.addColorStop(1, '#4f46e5');
+
+            // Rounded rectangle background
+            const radius = size * 0.22;
+            ctx.beginPath();
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.quadraticCurveTo(size, 0, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.quadraticCurveTo(size, size, size - radius, size);
+            ctx.lineTo(radius, size);
+            ctx.quadraticCurveTo(0, size, 0, size - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // Shopping cart icon
+            const cartSize = size * 0.35;
+            const cartX = size * 0.25;
+            const cartY = size * 0.22;
+            const scale = size / 512;
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.beginPath();
+            ctx.moveTo(cartX, cartY);
+            ctx.lineTo(cartX + cartSize * 0.3, cartY);
+            ctx.lineTo(cartX + cartSize * 0.55, cartY + cartSize * 1.5);
+            ctx.lineTo(cartX + cartSize * 2, cartY + cartSize * 1.5);
+            ctx.lineTo(cartX + cartSize * 2.2, cartY + cartSize * 0.75);
+            ctx.lineTo(cartX + cartSize * 0.8, cartY + cartSize * 0.75);
+            ctx.lineTo(cartX + cartSize * 0.75, cartY + cartSize * 0.5);
+            ctx.lineTo(cartX + cartSize * 2.2, cartY + cartSize * 0.5);
+            ctx.lineTo(cartX + cartSize * 2, cartY + cartSize * 1.3);
+            ctx.lineTo(cartX + cartSize * 0.6, cartY + cartSize * 1.3);
+            ctx.closePath();
+            ctx.fill();
+
+            // Main cart
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(cartX - cartSize * 0.1, cartY - cartSize * 0.1);
+            ctx.lineTo(cartX + cartSize * 0.4, cartY - cartSize * 0.1);
+            ctx.lineTo(cartX + cartSize * 0.7, cartY + cartSize * 1.7);
+            ctx.lineTo(cartX + cartSize * 2.3, cartY + cartSize * 1.7);
+            ctx.lineTo(cartX + cartSize * 2.6, cartY + cartSize * 0.6);
+            ctx.lineTo(cartX + cartSize * 0.9, cartY + cartSize * 0.6);
+            ctx.lineTo(cartX + cartSize * 0.85, cartY + cartSize * 0.25);
+            ctx.lineTo(cartX + cartSize * 2.6, cartY + cartSize * 0.25);
+            ctx.lineTo(cartX + cartSize * 2.4, cartY + cartSize * 1.5);
+            ctx.lineTo(cartX + cartSize * 0.65, cartY + cartSize * 1.5);
+            ctx.closePath();
+            ctx.fill();
+
+            // Wheels
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(cartX + cartSize * 0.85, cartY + cartSize * 2.1, cartSize * 0.25, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(cartX + cartSize * 2, cartY + cartSize * 2.1, cartSize * 0.25, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Items in cart (lines)
+            ctx.fillStyle = '#ffffff';
+            const itemY = cartY + cartSize * 0.8;
+            const itemHeight = cartSize * 0.08;
+            const itemRadius = itemHeight / 2;
+
+            // Item 1
+            ctx.beginPath();
+            ctx.roundRect(cartX + cartSize * 1.1, itemY, cartSize * 1.2, itemHeight, itemRadius);
+            ctx.fill();
+
+            // Item 2
+            ctx.beginPath();
+            ctx.roundRect(cartX + cartSize * 1.05, itemY + cartSize * 0.25, cartSize * 1.1, itemHeight, itemRadius);
+            ctx.fill();
+
+            // Item 3
+            ctx.beginPath();
+            ctx.roundRect(cartX + cartSize * 1, itemY + cartSize * 0.5, cartSize * 1, itemHeight, itemRadius);
+            ctx.fill();
+
+            // Checkmark badge
+            const badgeSize = size * 0.23;
+            const badgeX = size * 0.72;
+            const badgeY = size * 0.08;
+
+            ctx.fillStyle = '#10b981';
+            ctx.beginPath();
+            ctx.arc(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Checkmark
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = size * 0.025;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(badgeX + badgeSize * 0.3, badgeY + badgeSize * 0.5);
+            ctx.lineTo(badgeX + badgeSize * 0.45, badgeY + badgeSize * 0.65);
+            ctx.lineTo(badgeX + badgeSize * 0.75, badgeY + badgeSize * 0.3);
+            ctx.stroke();
+
+            return canvas;
+        }
+
+        function downloadIcon(canvas, filename) {
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function generateAllIcons() {
+            const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+            const preview = document.getElementById('preview');
+            const status = document.getElementById('status');
+
+            preview.innerHTML = '';
+            status.innerHTML = '<p>Generando iconos... Por favor, espera a que se descarguen todos.</p>';
+
+            let delay = 0;
+            sizes.forEach((size, index) => {
+                setTimeout(() => {
+                    const canvas = generateIcon(size);
+
+                    // Add to preview
+                    const item = document.createElement('div');
+                    item.className = 'icon-item';
+                    item.innerHTML = `
+                        <canvas width="100" height="100"></canvas>
+                        <p>icon-${size}.png</p>
+                    `;
+                    const previewCanvas = item.querySelector('canvas');
+                    const previewCtx = previewCanvas.getContext('2d');
+                    previewCtx.drawImage(canvas, 0, 0, 100, 100);
+                    preview.appendChild(item);
+
+                    // Download
+                    downloadIcon(canvas, `icon-${size}.png`);
+
+                    if (index === sizes.length - 1) {
+                        status.innerHTML = '<p>¡Iconos generados! Coloca los archivos en la carpeta de la PWA.</p>';
+                    }
+                }, delay);
+                delay += 300; // Delay between downloads to avoid browser blocking
+            });
+        }
+    </script>
+</body>
+</html>

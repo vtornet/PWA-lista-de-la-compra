@@ -304,9 +304,13 @@ const auth = {
 
     async signUp(email, password) {
         try {
+            const redirectTo = `${window.location.origin}`;
             const { data, error } = await supabaseClient.auth.signUp({
                 email,
-                password
+                password,
+                options: {
+                    emailRedirectTo: redirectTo
+                }
             });
 
             if (error) throw error;

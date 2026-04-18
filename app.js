@@ -275,7 +275,9 @@ const auth = {
                 supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 console.log('[Auth] Supabase initialized');
                 // Check for existing session asynchronously
-                this.checkSession().catch(err => console.error('[Auth] Session check error:', err));
+                this.handleEmailConfirmation().then(() => {
+                    return this.checkSession();
+                }).catch(err => console.error('[Auth] Session check error:', err));
             } else {
                 console.warn('[Auth] Supabase SDK not loaded yet');
                 // Try again after a short delay
@@ -284,6 +286,30 @@ const auth = {
         } catch (error) {
             console.error('[Auth] Failed to initialize:', error);
         }
+    },
+
+    async handleEmailConfirmation() {
+        // Check if URL contains confirmation tokens
+        const urlParams = new URLSearchParams(window.location.search);
+        const type = urlParams.get('type');
+
+        if (type === 'signup' || type === 'email_change') {
+            console.log('[Auth] Processing email confirmation...');
+            // Supabase automatically processes the confirmation and creates a session
+            // We just need to verify the session is active
+            const { data: { session }, error } = await supabaseClient.auth.getSession();
+
+            if (session && session.user.email_confirmed_at) {
+                console.log('[Auth] Email confirmed successfully');
+                ui.showToast('Email confirmado correctamente', 'success');
+                // Clean URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return true;
+            } else if (error) {
+                console.error('[Auth] Email confirmation check failed:', error);
+            }
+        }
+        return false;
     },
 
     async checkSession() {

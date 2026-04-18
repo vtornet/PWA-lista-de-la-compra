@@ -322,6 +322,10 @@ const auth = {
                 console.log('[Auth] User logged in:', currentUser.email);
                 this.updateAuthUI();
                 await this.loadUserProfile();
+                // Load shared data and subscribe to invitations
+                await loadSharedLists();
+                await loadPendingInvitations();
+                subscribeToInvitations();
             }
         } catch (error) {
             console.error('[Auth] Session check failed:', error);

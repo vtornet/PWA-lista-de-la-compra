@@ -269,19 +269,42 @@ const db = {
 // ============================================
 
 const auth = {
-    init() {
+    async init() {
         try {
             if (window.supabase) {
                 supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 console.log('[Auth] Supabase initialized');
-                // Check for existing session asynchronously
-                this.handleEmailConfirmation().then(() => {
-                    return this.checkSession();
-                }).catch(err => console.error('[Auth] Session check error:', err));
+
+                // Set up auth state change listener FIRST
+                supabaseClient.auth.onAuthStateChange((event, session) => {
+                    console.log('[Auth] Auth state changed:', event);
+                    if (session) {
+                        currentUser = session.user;
+                        this.updateAuthUI();
+                        this.loadUserProfile();
+                        // Load shared data and subscribe
+                        loadSharedLists();
+                        loadPendingInvitations();
+                        subscribeToInvitations();
+                    } else {
+                        currentUser = null;
+                        unsubscribeFromInvitations();
+                        itemsSync.unsubscribe();
+                        this.updateAuthUI();
+                        // Reload to clear shared lists
+                        dataOps.loadLists().then(() => ui.renderListsGrid());
+                        document.getElementById('invitationsSection').style.display = 'none';
+                    }
+                });
+
+                // Wait for email confirmation and session check
+                await this.handleEmailConfirmation();
+                await this.checkSession();
             } else {
                 console.warn('[Auth] Supabase SDK not loaded yet');
                 // Try again after a short delay
-                setTimeout(() => this.init(), 100);
+                await new Promise(resolve => setTimeout(resolve, 100));
+                return this.init();
             }
         } catch (error) {
             console.error('[Auth] Failed to initialize:', error);
@@ -2893,8 +2916,8 @@ function handleInstallPrompt() {
 
 async function init() {
     try {
-        // Initialize Supabase Auth first
-        auth.init();
+        // Initialize Supabase Auth first and wait for session
+        await auth.init();
 
         await db.open();
 
@@ -2913,13 +2936,6 @@ async function init() {
 
         setupEventListeners();
         handleInstallPrompt();
-
-        // Load shared lists and invitations if logged in
-        if (auth.isAuthenticated()) {
-            await loadSharedLists();
-            await loadPendingInvitations();
-            subscribeToInvitations();
-        }
 
     } catch (error) {
         console.error('Error initializing app:', error);

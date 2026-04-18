@@ -2,9 +2,9 @@
 // SERVICE WORKER - LISTA DE LA COMPRA PWA
 // ============================================
 
-const CACHE_NAME = 'shopping-list-pwa-v3';
-const STATIC_CACHE = 'static-v3';
-const DYNAMIC_CACHE = 'dynamic-v3';
+const CACHE_NAME = 'shopping-list-pwa-v4';
+const STATIC_CACHE = 'static-v4';
+const DYNAMIC_CACHE = 'dynamic-v4';
 
 // Assets to cache immediately
 const STATIC_ASSETS = [
@@ -81,26 +81,25 @@ self.addEventListener('fetch', (event) => {
                     return cache.match(request).then((cachedResponse) => {
                         if (cachedResponse) {
                             // Update cache in background
-                        fetch(request).then((networkResponse) => {
+                            fetch(request).then((networkResponse) => {
+                                if (networkResponse && networkResponse.ok) {
+                                    cache.put(request, networkResponse.clone());
+                                }
+                            }).catch(() => {});
+                            return cachedResponse;
+                        }
+                        // Not in cache, fetch from network
+                        return fetch(request).then((networkResponse) => {
                             if (networkResponse && networkResponse.ok) {
                                 cache.put(request, networkResponse.clone());
                             }
-                        }).catch(() => {});
-
-                        return cachedResponse;
-                    });
-
-                    // Not in cache, fetch from network
-                    return fetch(request).then((networkResponse) => {
-                        if (networkResponse && networkResponse.ok) {
-                            cache.put(request, networkResponse.clone());
-                        }
-                        return networkResponse;
-                    }).catch(() => {
-                        // Return a placeholder for failed image requests
-                        return new Response('', {
-                            status: 404,
-                            statusText: 'Not Found'
+                            return networkResponse;
+                        }).catch(() => {
+                            // Return a placeholder for failed image requests
+                            return new Response('', {
+                                status: 404,
+                                statusText: 'Not Found'
+                            });
                         });
                     });
                 })

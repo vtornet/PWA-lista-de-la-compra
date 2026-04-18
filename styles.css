@@ -1982,13 +1982,8 @@ button:focus-visible,
     right: var(--spacing-sm);
     display: flex;
     gap: var(--spacing-xs);
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-}
-
-.list-card:hover .list-card-actions,
-.list-card:active .list-card-actions {
     opacity: 1;
+    transition: opacity var(--transition-fast);
 }
 
 .list-card-action-btn {

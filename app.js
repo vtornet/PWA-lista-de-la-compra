@@ -426,6 +426,189 @@ const auth = {
 };
 
 // ============================================
+// ITEMS SYNC WITH SUPABASE
+// ============================================
+
+let itemsSubscription = null;
+
+const itemsSync = {
+    // Check if a list is shared
+    isListShared: async (listId) => {
+        const list = await db.get(STORES.lists, listId);
+        return list && list.isShared;
+    },
+
+    // Sync item to Supabase (create or update)
+    syncItem: async (item) => {
+        if (!auth.isAuthenticated()) return;
+
+        try {
+            // Check if list is shared
+            const isShared = await itemsSync.isListShared(item.listId);
+            if (!isShared) return;
+
+            // Upsert to Supabase
+            const { error } = await supabase
+                .from('items')
+                .upsert({
+                    id: item.id,
+                    list_id: item.listId,
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price,
+                    image_url: item.imageUrl,
+                    in_shopping_list: item.inShoppingList,
+                    created_by: currentUser.id
+                }, {
+                    onConflict: 'id'
+                });
+
+            if (error) {
+                console.error('[ItemsSync] Error syncing item:', error);
+            }
+        } catch (error) {
+            console.error('[ItemsSync] Sync error:', error);
+        }
+    },
+
+    // Delete item from Supabase
+    deleteItem: async (itemId) => {
+        if (!auth.isAuthenticated()) return;
+
+        try {
+            // Get item to check if list is shared
+            const item = await db.get(STORES.items, itemId);
+            if (!item) return;
+
+            const isShared = await itemsSync.isListShared(item.listId);
+            if (!isShared) return;
+
+            const { error } = await supabase
+                .from('items')
+                .delete()
+                .eq('id', itemId);
+
+            if (error) {
+                console.error('[ItemsSync] Error deleting item:', error);
+            }
+        } catch (error) {
+            console.error('[ItemsSync] Delete error:', error);
+        }
+    },
+
+    // Load items from Supabase for a shared list
+    loadItems: async (listId) => {
+        if (!auth.isAuthenticated()) return;
+
+        try {
+            const { data, error } = await supabase
+                .from('items')
+                .select('*')
+                .eq('list_id', listId);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                // Sync with local IndexedDB
+                for (const item of data) {
+                    const localItem = await db.get(STORES.items, item.id);
+                    if (!localItem) {
+                        // Item doesn't exist locally, add it
+                        await db.add(STORES.items, {
+                            id: item.id,
+                            listId: item.list_id,
+                            name: item.name,
+                            quantity: item.quantity,
+                            price: item.price,
+                            imageUrl: item.image_url,
+                            inShoppingList: item.in_shopping_list,
+                            previousPrice: null,
+                            createdAt: item.created_at ? new Date(item.created_at).getTime() : Date.now(),
+                            updatedAt: item.updated_at ? new Date(item.updated_at).getTime() : Date.now()
+                        });
+                    }
+                }
+                // Reload items from IndexedDB
+                await dataOps.loadItems(listId);
+            }
+        } catch (error) {
+            console.error('[ItemsSync] Error loading items:', error);
+        }
+    },
+
+    // Subscribe to realtime changes for items in current list
+    subscribe: (listId) => {
+        if (!auth.isAuthenticated() || itemsSubscription) return;
+
+        itemsSubscription = supabase
+            .channel('items-changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'items',
+                    filter: `list_id=eq.${listId}`
+                },
+                async (payload) => {
+                    console.log('[ItemsSync] Realtime change:', payload);
+
+                    if (payload.eventType === 'INSERT') {
+                        const newItem = payload.new;
+                        // Check if item exists locally
+                        const localItem = await db.get(STORES.items, newItem.id);
+                        if (!localItem) {
+                            await db.add(STORES.items, {
+                                id: newItem.id,
+                                listId: newItem.list_id,
+                                name: newItem.name,
+                                quantity: newItem.quantity,
+                                price: newItem.price,
+                                imageUrl: newItem.image_url,
+                                inShoppingList: newItem.in_shopping_list,
+                                previousPrice: null,
+                                createdAt: newItem.created_at ? new Date(newItem.created_at).getTime() : Date.now(),
+                                updatedAt: newItem.updated_at ? new Date(newItem.updated_at).getTime() : Date.now()
+                            });
+                            await dataOps.loadItems(appState.currentListId);
+                            ui.renderItems();
+                        }
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updatedItem = payload.new;
+                        const localItem = await db.get(STORES.items, updatedItem.id);
+                        if (localItem) {
+                            localItem.name = updatedItem.name;
+                            localItem.quantity = updatedItem.quantity;
+                            localItem.price = updatedItem.price;
+                            localItem.imageUrl = updatedItem.image_url;
+                            localItem.inShoppingList = updatedItem.in_shopping_list;
+                            localItem.updatedAt = updatedItem.updated_at ? new Date(updatedItem.updated_at).getTime() : Date.now();
+                            await db.put(STORES.items, localItem);
+                            await dataOps.loadItems(appState.currentListId);
+                            ui.renderItems();
+                        }
+                    } else if (payload.eventType === 'DELETE') {
+                        const deletedId = payload.old.id;
+                        await db.delete(STORES.items, deletedId);
+                        await dataOps.loadItems(appState.currentListId);
+                        ui.renderItems();
+                    }
+                }
+            )
+            .subscribe((status) => {
+                console.log('[ItemsSync] Subscription status:', status);
+            });
+    },
+
+    unsubscribe: () => {
+        if (itemsSubscription) {
+            supabase.removeChannel(itemsSubscription);
+            itemsSubscription = null;
+        }
+    }
+};
+
+// ============================================
 // DATA OPERATIONS
 // ============================================
 
@@ -2376,189 +2559,6 @@ async function respondToInvitation(memberId, response) {
 
 // Make it global for onclick
 window.respondToInvitation = respondToInvitation;
-
-// ============================================
-// ITEMS SYNC WITH SUPABASE
-// ============================================
-
-let itemsSubscription = null;
-
-const itemsSync = {
-    // Check if a list is shared
-    isListShared: async (listId) => {
-        const list = await db.get(STORES.lists, listId);
-        return list && list.isShared;
-    },
-
-    // Sync item to Supabase (create or update)
-    syncItem: async (item) => {
-        if (!auth.isAuthenticated()) return;
-
-        try {
-            // Check if list is shared
-            const isShared = await itemsSync.isListShared(item.listId);
-            if (!isShared) return;
-
-            // Upsert to Supabase
-            const { error } = await supabase
-                .from('items')
-                .upsert({
-                    id: item.id,
-                    list_id: item.listId,
-                    name: item.name,
-                    quantity: item.quantity,
-                    price: item.price,
-                    image_url: item.imageUrl,
-                    in_shopping_list: item.inShoppingList,
-                    created_by: currentUser.id
-                }, {
-                    onConflict: 'id'
-                });
-
-            if (error) {
-                console.error('[ItemsSync] Error syncing item:', error);
-            }
-        } catch (error) {
-            console.error('[ItemsSync] Sync error:', error);
-        }
-    },
-
-    // Delete item from Supabase
-    deleteItem: async (itemId) => {
-        if (!auth.isAuthenticated()) return;
-
-        try {
-            // Get item to check if list is shared
-            const item = await db.get(STORES.items, itemId);
-            if (!item) return;
-
-            const isShared = await itemsSync.isListShared(item.listId);
-            if (!isShared) return;
-
-            const { error } = await supabase
-                .from('items')
-                .delete()
-                .eq('id', itemId);
-
-            if (error) {
-                console.error('[ItemsSync] Error deleting item:', error);
-            }
-        } catch (error) {
-            console.error('[ItemsSync] Delete error:', error);
-        }
-    },
-
-    // Load items from Supabase for a shared list
-    loadItems: async (listId) => {
-        if (!auth.isAuthenticated()) return;
-
-        try {
-            const { data, error } = await supabase
-                .from('items')
-                .select('*')
-                .eq('list_id', listId);
-
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-                // Sync with local IndexedDB
-                for (const item of data) {
-                    const localItem = await db.get(STORES.items, item.id);
-                    if (!localItem) {
-                        // Item doesn't exist locally, add it
-                        await db.add(STORES.items, {
-                            id: item.id,
-                            listId: item.list_id,
-                            name: item.name,
-                            quantity: item.quantity,
-                            price: item.price,
-                            imageUrl: item.image_url,
-                            inShoppingList: item.in_shopping_list,
-                            previousPrice: null,
-                            createdAt: item.created_at ? new Date(item.created_at).getTime() : Date.now(),
-                            updatedAt: item.updated_at ? new Date(item.updated_at).getTime() : Date.now()
-                        });
-                    }
-                }
-                // Reload items from IndexedDB
-                await dataOps.loadItems(listId);
-            }
-        } catch (error) {
-            console.error('[ItemsSync] Error loading items:', error);
-        }
-    },
-
-    // Subscribe to realtime changes for items in current list
-    subscribe: (listId) => {
-        if (!auth.isAuthenticated() || itemsSubscription) return;
-
-        itemsSubscription = supabase
-            .channel('items-changes')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'items',
-                    filter: `list_id=eq.${listId}`
-                },
-                async (payload) => {
-                    console.log('[ItemsSync] Realtime change:', payload);
-
-                    if (payload.eventType === 'INSERT') {
-                        const newItem = payload.new;
-                        // Check if item exists locally
-                        const localItem = await db.get(STORES.items, newItem.id);
-                        if (!localItem) {
-                            await db.add(STORES.items, {
-                                id: newItem.id,
-                                listId: newItem.list_id,
-                                name: newItem.name,
-                                quantity: newItem.quantity,
-                                price: newItem.price,
-                                imageUrl: newItem.image_url,
-                                inShoppingList: newItem.in_shopping_list,
-                                previousPrice: null,
-                                createdAt: newItem.created_at ? new Date(newItem.created_at).getTime() : Date.now(),
-                                updatedAt: newItem.updated_at ? new Date(newItem.updated_at).getTime() : Date.now()
-                            });
-                            await dataOps.loadItems(appState.currentListId);
-                            ui.renderItems();
-                        }
-                    } else if (payload.eventType === 'UPDATE') {
-                        const updatedItem = payload.new;
-                        const localItem = await db.get(STORES.items, updatedItem.id);
-                        if (localItem) {
-                            localItem.name = updatedItem.name;
-                            localItem.quantity = updatedItem.quantity;
-                            localItem.price = updatedItem.price;
-                            localItem.imageUrl = updatedItem.image_url;
-                            localItem.inShoppingList = updatedItem.in_shopping_list;
-                            localItem.updatedAt = updatedItem.updated_at ? new Date(updatedItem.updated_at).getTime() : Date.now();
-                            await db.put(STORES.items, localItem);
-                            await dataOps.loadItems(appState.currentListId);
-                            ui.renderItems();
-                        }
-                    } else if (payload.eventType === 'DELETE') {
-                        const deletedId = payload.old.id;
-                        await db.delete(STORES.items, deletedId);
-                        await dataOps.loadItems(appState.currentListId);
-                        ui.renderItems();
-                    }
-                }
-            )
-            .subscribe((status) => {
-                console.log('[ItemsSync] Subscription status:', status);
-            });
-    },
-
-    unsubscribe: () => {
-        if (itemsSubscription) {
-            supabase.removeChannel(itemsSubscription);
-            itemsSubscription = null;
-        }
-    }
-};
 
 function handleInstallPrompt() {
     pwaInstall.init();

@@ -394,3 +394,18 @@ npx lighthouse http://localhost:8080 --view
 
 **Última actualización**: Abril 2026
 **Versión**: 1.2.0 (con instalación PWA completa)
+
+---
+
+## PROBLEMAS CONOCIDOS
+
+### Invitaciones en tiempo real (SOLUCIONADO)
+- **Problema**: Las invitaciones a listas compartidas solo aparecían tras cerrar sesión y volver a entrar
+- **Causa**: `checkSession()` no llamaba a `subscribeToInvitations()`, por lo que la suscripción realtime no se establecía cuando el usuario ya tenía sesión activa
+- **Solución**: Añadidas las llamadas a `loadSharedLists()`, `loadPendingInvitations()` y `subscribeToInvitations()` en `checkSession()`
+- **Fecha de resolución**: 18-04-2026
+
+### Listas compartidas vacías (PENDIENTE)
+- **Problema**: Al aceptar una invitación, la lista compartida aparece sin productos
+- **Causa**: Los productos no se sincronizan desde Supabase al aceptar la invitación
+- **Estado**: Se ha añadido `itemsSync.loadItems()` en `loadSharedLists()`, pero puede necesitar validación adicional

@@ -2463,6 +2463,7 @@ async function loadSharedLists() {
 let invitationsSubscription = null;
 
 function subscribeToInvitations() {
+    console.log('[Realtime] subscribeToInvitations called', { authenticated: auth.isAuthenticated(), hasSubscription: !!invitationsSubscription });
     if (!auth.isAuthenticated() || invitationsSubscription) return;
 
     invitationsSubscription = supabaseClient

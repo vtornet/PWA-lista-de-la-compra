@@ -2,9 +2,9 @@
 // SERVICE WORKER - LISTA DE LA COMPRA PWA
 // ============================================
 
-const CACHE_NAME = 'shopping-list-pwa-v4';
-const STATIC_CACHE = 'static-v4';
-const DYNAMIC_CACHE = 'dynamic-v4';
+const CACHE_NAME = 'shopping-list-pwa-v5';
+const STATIC_CACHE = 'static-v5';
+const DYNAMIC_CACHE = 'dynamic-v5';
 
 // Assets to cache immediately
 const STATIC_ASSETS = [

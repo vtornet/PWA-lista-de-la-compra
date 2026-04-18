@@ -2925,6 +2925,10 @@ window.addEventListener('load', () => {
 // START APP
 // ============================================
 
-init();
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
 
 window.showToast = ui.showToast.bind(ui);

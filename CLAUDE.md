@@ -439,6 +439,15 @@ Para que las listas compartidas funcionen correctamente, asegúrate de tener:
 - **list_members**: id (uuid), list_id (text), user_id (uuid), role (text), status (text), list_name (text), created_by (uuid), created_at (timestamp)
 - **items**: id (text), list_id (text), name (text), quantity (integer), price (numeric), image_url (text), in_shopping_list (boolean), created_at (timestamp), updated_at (timestamp), created_by (uuid)
 
+### Configuración Realtime necesaria:
+```sql
+-- Habilitar Realtime para las tablas de listas compartidas
+ALTER PUBLICATION supabase_realtime ADD TABLE public.list_members;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.items;
+```
+
+**IMPORTANTE**: Sin habilitar Realtime, la sincronización en tiempo real NO funcionará. Las invitaciones y cambios en productos no se recibirán automáticamente.
+
 ### Políticas RLS necesarias:
 ```sql
 -- list_members

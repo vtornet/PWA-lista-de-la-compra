@@ -607,6 +607,14 @@ const dataOps = {
     },
 
     async deleteList(id) {
+        const list = appState.lists.find(l => l.id === id);
+
+        // If this is a shared list (invitee), add to blacklist so it doesn't reappear
+        if (list && list.isShared && list.sharedRole !== 'owner') {
+            addDeletedSharedList(id);
+            console.log('[DataOps] Added shared list to blacklist:', id);
+        }
+
         // Check if this is a shared list where user is not owner
         if (auth.isAuthenticated() && supabaseClient) {
             try {
@@ -2543,8 +2551,37 @@ async function handleShareListSubmit(e) {
 // SHARED LISTS
 // ============================================
 
+// Blacklist of shared lists that user has deleted
+let deletedSharedLists = new Set();
+
+function loadDeletedSharedLists() {
+    try {
+        const stored = localStorage.getItem('deletedSharedLists');
+        if (stored) {
+            deletedSharedLists = new Set(JSON.parse(stored));
+        }
+    } catch (e) {
+        deletedSharedLists = new Set();
+    }
+}
+
+function saveDeletedSharedLists() {
+    localStorage.setItem('deletedSharedLists', JSON.stringify(Array.from(deletedSharedLists)));
+}
+
+function addDeletedSharedList(listId) {
+    deletedSharedLists.add(listId);
+    saveDeletedSharedLists();
+}
+
+function isDeletedSharedList(listId) {
+    return deletedSharedLists.has(listId);
+}
+
 async function loadSharedLists() {
     if (!auth.isAuthenticated()) return;
+
+    loadDeletedSharedLists();
 
     try {
         const { data, error } = await supabaseClient
@@ -2556,8 +2593,11 @@ async function loadSharedLists() {
         if (!error && data) {
             console.log('[Shared] Loaded shared lists:', data);
 
+            // Filter out deleted lists
+            const validMemberships = data.filter(member => !isDeletedSharedList(member.list_id));
+
             // Get the list IDs from Supabase
-            const sharedListIds = new Set(data.map(member => member.list_id));
+            const sharedListIds = new Set(validMemberships.map(member => member.list_id));
 
             // Remove local shared lists that no longer exist in Supabase
             // BUT only if they were received from others (not created by current user)
@@ -2580,7 +2620,7 @@ async function loadSharedLists() {
             }
 
             // Sync shared lists with local IndexedDB
-            for (const member of data) {
+            for (const member of validMemberships) {
                 // Check if list already exists locally
                 const localList = await db.get(STORES.lists, member.list_id);
                 const listName = member.list_name || `Lista compartida (${member.list_id.slice(0, 8)})`;

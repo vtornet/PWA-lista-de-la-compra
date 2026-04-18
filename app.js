@@ -271,17 +271,24 @@ const db = {
 const auth = {
     init() {
         try {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            console.log('[Auth] Supabase initialized');
-
-            // Check for existing session
-            this.checkSession();
+            if (window.supabase) {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('[Auth] Supabase initialized');
+                // Check for existing session asynchronously
+                this.checkSession().catch(err => console.error('[Auth] Session check error:', err));
+            } else {
+                console.warn('[Auth] Supabase SDK not loaded yet');
+                // Try again after a short delay
+                setTimeout(() => this.init(), 100);
+            }
         } catch (error) {
             console.error('[Auth] Failed to initialize:', error);
         }
     },
 
     async checkSession() {
+        if (!supabase) return;
+
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {

@@ -2391,8 +2391,10 @@ async function handleShareListSubmit(e) {
 
         // Upload all items from this list to Supabase
         const listItems = appState.items.filter(i => i.listId === currentShareListId);
+        console.log('[Share] Uploading', listItems.length, 'items to Supabase for list:', currentShareListId);
+
         for (const item of listItems) {
-            await supabaseClient
+            const { error: upsertError } = await supabaseClient
                 .from('items')
                 .upsert({
                     id: item.id,
@@ -2406,7 +2408,13 @@ async function handleShareListSubmit(e) {
                     updated_at: Date.now(),
                     created_by: currentUser.id
                 });
+
+            if (upsertError) {
+                console.error('[Share] Error uploading item:', item.name, upsertError);
+            }
         }
+
+        console.log('[Share] Finished uploading items');
 
         // Mark list as shared locally
         const currentList = appState.lists.find(l => l.id === currentShareListId);

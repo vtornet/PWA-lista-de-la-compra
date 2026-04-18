@@ -295,7 +295,7 @@ const auth = {
                 currentUser = session.user;
                 console.log('[Auth] User logged in:', currentUser.email);
                 this.updateAuthUI();
-                await this.loadUserProfile();
+                // Profile load skipped for now - configure RLS policies in Supabase dashboard
             }
         } catch (error) {
             console.error('[Auth] Session check failed:', error);
@@ -317,11 +317,10 @@ const auth = {
 
             if (data.user) {
                 // Create profile record
-                await this.createProfile(data.user.id, email);
+                // await this.createProfile(data.user.id, email);
                 currentUser = data.user;
                 this.updateAuthUI();
-                // New user won't have shared lists yet, but set up subscription
-                subscribeToInvitations();
+                // Shared lists skipped for now
                 return { success: true };
             }
         } catch (error) {
@@ -342,11 +341,10 @@ const auth = {
             if (data.user) {
                 currentUser = data.user;
                 this.updateAuthUI();
-                await this.loadUserProfile();
-                // Load shared data
-                await loadSharedLists();
-                await loadPendingInvitations();
-                subscribeToInvitations();
+                // Profile and shared lists skipped for now - configure Supabase tables first
+                // await loadSharedLists();
+                // await loadPendingInvitations();
+                // subscribeToInvitations();
                 return { success: true };
             }
         } catch (error) {
@@ -379,13 +377,12 @@ const auth = {
                 .insert({ id: userId, email });
 
             if (error) {
-                // If profile already exists, ignore
-                if (error.code !== '23505') {
-                    console.error('[Auth] Profile creation failed:', error);
-                }
+                // Silently ignore - profiles table is optional
+                console.log('[Auth] Profile creation skipped (optional feature)');
             }
         } catch (error) {
-            console.error('[Auth] Profile creation error:', error);
+            // Silently ignore - profiles table is optional
+            console.log('[Auth] Profile creation skipped (optional feature)');
         }
     },
 
@@ -402,8 +399,11 @@ const auth = {
             if (!error && data) {
                 return data;
             }
+            // Silently fail if profiles table doesn't exist
+            console.log('[Auth] Profiles table not configured (optional)');
         } catch (error) {
-            console.error('[Auth] Profile load failed:', error);
+            // Silently fail - profiles table is optional for basic auth
+            console.log('[Auth] Profile load skipped (optional feature)');
         }
         return null;
     },

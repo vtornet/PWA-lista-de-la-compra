@@ -1201,6 +1201,7 @@ img, picture {
     transition: opacity var(--transition-base);
 }
 
+.modal.active,
 .modal.open {
     opacity: 1;
     pointer-events: auto;

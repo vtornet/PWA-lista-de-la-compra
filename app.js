@@ -524,6 +524,17 @@ const dataOps = {
                 console.error('[DataOps] Error loading lists from Supabase:', error);
             }
 
+            // Load items from Supabase for all lists that are newer or missing locally
+            for (const list of appState.lists) {
+                const localItems = await db.getAll(STORES.items);
+                const hasLocalItems = localItems.some(i => i.listId === list.id);
+
+                // If no local items or list is newer from Supabase, load items from Supabase
+                if (!hasLocalItems) {
+                    await itemsSync.loadItems(list.id);
+                }
+            }
+
             // Load shared lists from list_members
             await loadSharedLists();
         }

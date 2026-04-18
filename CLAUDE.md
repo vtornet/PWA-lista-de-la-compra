@@ -393,7 +393,7 @@ npx lighthouse http://localhost:8080 --view
 ---
 
 **Última actualización**: Abril 2026
-**Versión**: 1.2.0 (con instalación PWA completa)
+**Versión**: 1.3.0 (con sincronización completa)
 
 ---
 
@@ -427,6 +427,34 @@ npx lighthouse http://localhost:8080 --view
 - **Causa**: No existía suscripción realtime para la tabla `items`
 - **Solución**: Añadida función `subscribeToItems()` que escucha cambios en items de listas compartidas y actualiza el estado local
 - **Fecha de resolución**: 18-04-2026
+
+### Sincronización completa entre dispositivos (SOLUCIONADO)
+- **Problema**: Las listas no se sincronizaban entre dispositivos del mismo usuario
+- **Causa**: Las listas solo se guardaban en IndexedDB localmente
+- **Solución**:
+  - Creada tabla `lists` en Supabase
+  - Todas las operaciones (crear, actualizar, borrar listas e items) se sincronizan con Supabase
+  - Listas importadas desde JSON también se sincronizan
+  - Blacklist para listas compartidas borradas por invitados
+- **Fecha de resolución**: 18-04-2026
+
+---
+
+## SINCRONIZACIÓN CON SUPABASE
+
+La app ahora sincroniza automáticamente todos los datos con Supabase:
+
+### Tablas en Supabase:
+- **lists**: Todas las listas de usuarios (propias y compartidas)
+- **items**: Todos los productos de todas las listas
+- **list_members**: Membresías de listas compartidas
+- **profiles**: Perfiles de usuario
+
+### Comportamiento:
+- Listas **propias**: Se sincronizan entre tus dispositivos
+- Listas **compartidas**: Sincronización en tiempo real entre usuarios
+- Listas **importadas**: Se guardan en Supabase automáticamente
+- Listas **borradas**: Se eliminan de Supabase (si eres propietario) o se añaden a blacklist (si eres invitado)
 
 ---
 

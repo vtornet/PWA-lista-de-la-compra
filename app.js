@@ -891,12 +891,15 @@ Object.assign(itemsSync, {
         if (!supabaseClient || !auth.isAuthenticated()) return;
 
         try {
+            console.log('[ItemsSync] Loading items for list:', listId);
             const { data, error } = await supabaseClient
                 .from('items')
                 .select('*')
                 .eq('list_id', listId);
 
-            if (!error && data) {
+            console.log('[ItemsSync] Items from Supabase:', data, 'Error:', error);
+
+            if (!error && data && data.length > 0) {
                 for (const item of data) {
                     const existingItem = await db.get(STORES.items, item.id);
                     if (!existingItem) {
@@ -913,6 +916,8 @@ Object.assign(itemsSync, {
                     }
                 }
                 await dataOps.loadItems(listId);
+            } else {
+                console.log('[ItemsSync] No items found for list:', listId);
             }
         } catch (error) {
             console.error('[ItemsSync] Error loading items:', error);

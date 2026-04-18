@@ -18,6 +18,16 @@ const STORAGE_KEYS = {
     installDismissed: 'installDismissed'
 };
 
+// ============================================
+// SUPABASE CONFIG
+// ============================================
+
+const SUPABASE_URL = 'https://ezwwaepvpuurboijbsry.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_dowcVDh_7Ux-9PP9UKR9SA_u5SSPTYn';
+
+let supabase = null;
+let currentUser = null;
+
 let appState = {
     currentListId: null,
     showPending: true,
@@ -251,6 +261,148 @@ const db = {
             };
             request.onerror = () => reject(request.error);
         });
+    }
+};
+
+// ============================================
+// SUPABASE AUTH
+// ============================================
+
+const auth = {
+    init() {
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('[Auth] Supabase initialized');
+
+            // Check for existing session
+            this.checkSession();
+        } catch (error) {
+            console.error('[Auth] Failed to initialize:', error);
+        }
+    },
+
+    async checkSession() {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                currentUser = session.user;
+                console.log('[Auth] User logged in:', currentUser.email);
+                this.updateAuthUI();
+                await this.loadUserProfile();
+            }
+        } catch (error) {
+            console.error('[Auth] Session check failed:', error);
+        }
+    },
+
+    async signUp(email, password) {
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password
+            });
+
+            if (error) throw error;
+
+            if (data.user) {
+                // Create profile record
+                await this.createProfile(data.user.id, email);
+                currentUser = data.user;
+                this.updateAuthUI();
+                return { success: true };
+            }
+        } catch (error) {
+            console.error('[Auth] Sign up failed:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    async signIn(email, password) {
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password
+            });
+
+            if (error) throw error;
+
+            if (data.user) {
+                currentUser = data.user;
+                this.updateAuthUI();
+                await this.loadUserProfile();
+                return { success: true };
+            }
+        } catch (error) {
+            console.error('[Auth] Sign in failed:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    async signOut() {
+        try {
+            await supabase.auth.signOut();
+            currentUser = null;
+            this.updateAuthUI();
+            ui.showToast('Sesión cerrada', 'success');
+        } catch (error) {
+            console.error('[Auth] Sign out failed:', error);
+        }
+    },
+
+    async createProfile(userId, email) {
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .insert({ id: userId, email });
+
+            if (error) {
+                // If profile already exists, ignore
+                if (error.code !== '23505') {
+                    console.error('[Auth] Profile creation failed:', error);
+                }
+            }
+        } catch (error) {
+            console.error('[Auth] Profile creation error:', error);
+        }
+    },
+
+    async loadUserProfile() {
+        if (!currentUser) return null;
+
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', currentUser.id)
+                .single();
+
+            if (!error && data) {
+                return data;
+            }
+        } catch (error) {
+            console.error('[Auth] Profile load failed:', error);
+        }
+        return null;
+    },
+
+    updateAuthUI() {
+        const authSection = document.getElementById('authSection');
+        const userEmailSpan = document.getElementById('userEmail');
+
+        if (!authSection) return;
+
+        if (currentUser) {
+            authSection.classList.add('logged-in');
+            if (userEmailSpan) {
+                userEmailSpan.textContent = currentUser.email;
+            }
+        } else {
+            authSection.classList.remove('logged-in');
+        }
+    },
+
+    isAuthenticated() {
+        return currentUser !== null;
     }
 };
 
@@ -1786,6 +1938,222 @@ function closeIosInstallModal() {
     document.getElementById('iosInstallModal').classList.remove('active');
 }
 
+// ============================================
+// AUTH MODAL
+// ============================================
+
+let authMode = 'login'; // 'login' or 'signup'
+
+function openAuthModal(mode = 'login') {
+    authMode = mode;
+    const modal = document.getElementById('authModal');
+    const title = document.getElementById('authModalTitle');
+    const toggleBtn = document.getElementById('authToggleMode');
+    const submitBtn = document.getElementById('authSubmitBtn');
+
+    if (mode === 'signup') {
+        title.textContent = 'Registrarse';
+        toggleBtn.textContent = '¿Ya tienes cuenta? Inicia sesión';
+        submitBtn.textContent = 'Registrarse';
+    } else {
+        title.textContent = 'Iniciar sesión';
+        toggleBtn.textContent = '¿No tienes cuenta? Regístrate';
+        submitBtn.textContent = 'Entrar';
+    }
+
+    modal.classList.add('active');
+}
+
+function closeAuthModal() {
+    document.getElementById('authModal').classList.remove('active');
+    document.getElementById('authForm').reset();
+}
+
+async function handleAuthSubmit(e) {
+    e.preventDefault();
+
+    const email = document.getElementById('authEmail').value;
+    const password = document.getElementById('authPassword').value;
+
+    let result;
+    if (authMode === 'signup') {
+        result = await auth.signUp(email, password);
+        if (result.success) {
+            ui.showToast('Registro exitoso. ¡Bienvenido!', 'success');
+            closeAuthModal();
+        } else {
+            ui.showToast(result.error || 'Error al registrarse', 'error');
+        }
+    } else {
+        result = await auth.signIn(email, password);
+        if (result.success) {
+            ui.showToast('Sesión iniciada correctamente', 'success');
+            closeAuthModal();
+            loadSharedLists();
+        } else {
+            ui.showToast(result.error || 'Error al iniciar sesión', 'error');
+        }
+    }
+}
+
+function toggleAuthMode() {
+    openAuthModal(authMode === 'login' ? 'signup' : 'login');
+}
+
+// ============================================
+// SHARE LIST MODAL
+// ============================================
+
+function openShareListModal(listId) {
+    currentShareListId = listId;
+    document.getElementById('shareListModal').classList.add('active');
+    loadListMembers(listId);
+}
+
+function closeShareListModal() {
+    document.getElementById('shareListModal').classList.remove('active');
+    document.getElementById('shareListForm').reset();
+    currentShareListId = null;
+}
+
+async function loadListMembers(listId) {
+    const membersList = document.getElementById('listMembersList');
+    membersList.innerHTML = '<p style="font-size: var(--font-size-sm); color: var(--text-secondary);">Cargando miembros...</p>';
+
+    try {
+        // Get local list members (from IndexedDB) and Supabase members
+        const localLists = await db.getAll(STORES.lists);
+        const localList = localLists.find(l => l.id === listId);
+
+        // For now, show owner info
+        let membersHTML = '';
+        if (localList) {
+            membersHTML = `
+                <div class="list-member-item">
+                    <span class="list-member-email">${localList.name} (propietario)</span>
+                    <span class="list-member-role">Owner</span>
+                </div>
+            `;
+        }
+
+        // TODO: Load from Supabase when implemented
+        membersList.innerHTML = membersHTML || '<p style="font-size: var(--font-size-sm); color: var(--text-secondary);">No hay miembros añadidos</p>';
+    } catch (error) {
+        console.error('[Share] Error loading members:', error);
+        membersList.innerHTML = '<p style="font-size: var(--font-size-sm); color: var(--danger);">Error al cargar miembros</p>';
+    }
+}
+
+async function handleShareListSubmit(e) {
+    e.preventDefault();
+
+    if (!auth.isAuthenticated()) {
+        ui.showToast('Debes iniciar sesión para compartir listas', 'warning');
+        closeShareListModal();
+        openAuthModal('login');
+        return;
+    }
+
+    const email = document.getElementById('shareEmail').value;
+    const role = document.getElementById('shareRole').value;
+
+    // TODO: Implement Supabase invite
+    // For now, show a message
+    ui.showToast(`Invitación enviada a ${email}`, 'success');
+    closeShareListModal();
+}
+
+// ============================================
+// SHARED LISTS
+// ============================================
+
+async function loadSharedLists() {
+    if (!auth.isAuthenticated()) return;
+
+    try {
+        const { data, error } = await supabase
+            .from('list_members')
+            .select('*, profiles!inner(email)')
+            .eq('user_id', currentUser.id)
+            .eq('status', 'accepted');
+
+        if (!error && data) {
+            console.log('[Shared] Loaded shared lists:', data);
+            // TODO: Sync shared lists with local IndexedDB
+        }
+    } catch (error) {
+        console.error('[Shared] Error loading shared lists:', error);
+    }
+}
+
+async function loadPendingInvitations() {
+    if (!auth.isAuthenticated()) return;
+
+    try {
+        const { data, error } = await supabase
+            .from('list_members')
+            .select('*, profiles!inner(email)')
+            .eq('user_id', currentUser.id)
+            .eq('status', 'pending');
+
+        if (!error && data && data.length > 0) {
+            renderInvitations(data);
+        } else {
+            document.getElementById('invitationsSection').style.display = 'none';
+        }
+    } catch (error) {
+        console.error('[Shared] Error loading invitations:', error);
+    }
+}
+
+function renderInvitations(invitations) {
+    const section = document.getElementById('invitationsSection');
+    const list = document.getElementById('invitationsList');
+
+    if (invitations.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    list.innerHTML = invitations.map(inv => `
+        <div class="invitation-card">
+            <div class="invitation-info">
+                <span class="invitation-list-name">Lista compartida</span>
+                <span style="font-size: var(--font-size-xs); color: var(--text-secondary);">Invitado por: ${inv.profiles.email}</span>
+            </div>
+            <div class="invitation-actions">
+                <button class="btn btn-outline btn-small" onclick="respondToInvitation('${inv.id}', 'rejected')">Rechazar</button>
+                <button class="btn btn-primary btn-small" onclick="respondToInvitation('${inv.id}', 'accepted')">Aceptar</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function respondToInvitation(memberId, response) {
+    try {
+        const { error } = await supabase
+            .from('list_members')
+            .update({ status: response })
+            .eq('id', memberId)
+            .eq('user_id', currentUser.id);
+
+        if (error) throw error;
+
+        ui.showToast(response === 'accepted' ? 'Invitación aceptada' : 'Invitación rechazada', 'success');
+        await loadPendingInvitations();
+        if (response === 'accepted') {
+            await loadSharedLists();
+        }
+    } catch (error) {
+        console.error('[Shared] Error responding to invitation:', error);
+        ui.showToast('Error al responder a la invitación', 'error');
+    }
+}
+
+// Make it global for onclick
+window.respondToInvitation = respondToInvitation;
+
 function handleInstallPrompt() {
     pwaInstall.init();
 }
@@ -1796,6 +2164,9 @@ function handleInstallPrompt() {
 
 async function init() {
     try {
+        // Initialize Supabase Auth first
+        auth.init();
+
         await db.open();
 
         await dataOps.loadLists();
@@ -1813,6 +2184,11 @@ async function init() {
 
         setupEventListeners();
         handleInstallPrompt();
+
+        // Load shared lists if logged in
+        if (auth.isAuthenticated()) {
+            await loadSharedLists();
+        }
 
     } catch (error) {
         console.error('Error initializing app:', error);
@@ -1855,7 +2231,7 @@ function setupEventListeners() {
     // Share button in items view
     document.getElementById('shareListBtn').addEventListener('click', () => {
         if (appState.currentListId) {
-            shareList(appState.currentListId);
+            openShareListModal(appState.currentListId);
         }
     });
 
@@ -2125,6 +2501,20 @@ function setupEventListeners() {
     // iOS install modal
     document.getElementById('iosInstallModalOverlay').addEventListener('click', closeIosInstallModal);
     document.getElementById('closeIosInstallModal').addEventListener('click', closeIosInstallModal);
+
+    // Auth modal
+    document.getElementById('loginBtn').addEventListener('click', () => openAuthModal('login'));
+    document.getElementById('logoutBtn').addEventListener('click', () => auth.signOut());
+    document.getElementById('authModalOverlay').addEventListener('click', closeAuthModal);
+    document.getElementById('closeAuthModal').addEventListener('click', closeAuthModal);
+    document.getElementById('authForm').addEventListener('submit', handleAuthSubmit);
+    document.getElementById('authToggleMode').addEventListener('click', toggleAuthMode);
+
+    // Share list modal
+    document.getElementById('shareListModalOverlay').addEventListener('click', closeShareListModal);
+    document.getElementById('closeShareListModal').addEventListener('click', closeShareListModal);
+    document.getElementById('shareListForm').addEventListener('submit', handleShareListSubmit);
+    document.getElementById('cancelShareBtn').addEventListener('click', closeShareListModal);
 
     // Handle resize for chart
     window.addEventListener('resize', utils.debounce(() => {

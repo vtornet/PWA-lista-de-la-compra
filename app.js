@@ -482,6 +482,26 @@ const dataOps = {
     async loadLists() {
         appState.lists = await db.getAll(STORES.lists);
         appState.lists.sort((a, b) => a.name.localeCompare(b.name));
+
+        // Check if any list has items in Supabase and mark as shared
+        if (auth.isAuthenticated()) {
+            for (const list of appState.lists) {
+                if (!list.isShared) {
+                    // Check if this list has items in Supabase
+                    const { data, error } = await supabaseClient
+                        .from('items')
+                        .select('id')
+                        .eq('list_id', list.id)
+                        .limit(1);
+
+                    if (data && data.length > 0) {
+                        console.log('[DataOps] List', list.name, 'has items in Supabase, marking as shared');
+                        list.isShared = true;
+                        await db.put(STORES.lists, list);
+                    }
+                }
+            }
+        }
     },
 
     async loadItems(listId) {

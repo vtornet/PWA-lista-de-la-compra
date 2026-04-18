@@ -2645,8 +2645,8 @@ async function loadSharedLists() {
                     await db.put(STORES.lists, localList);
                 }
             }
-            // Reload lists to show shared ones
-            await dataOps.loadLists();
+            // Update UI to show shared ones
+            appState.lists.sort((a, b) => a.name.localeCompare(b.name));
             ui.renderListsGrid();
 
             // Subscribe to realtime items changes

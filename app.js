@@ -1268,7 +1268,7 @@ const ui = {
         container.querySelectorAll('.list-card-action-btn.share').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                shareList(btn.dataset.listId);
+                openShareListModal(btn.dataset.listId);
             });
         });
 

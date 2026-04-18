@@ -1,8 +1,10 @@
 {
+  "id": "lista-compra-pwa-v1",
   "name": "Lista de la Compra",
   "short_name": "ListaCompra",
   "description": "Gestiona tus listas de compra de forma sencilla y eficiente",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#f8fafc",

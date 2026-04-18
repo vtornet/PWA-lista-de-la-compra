@@ -1639,18 +1639,26 @@ const pwaInstall = {
     },
 
     canShowPrompt: () => {
-        if (pwaInstall.isInstalled()) return false;
-        if (localStorage.getItem(STORAGE_KEYS.installDismissed)) return false;
+        const installed = pwaInstall.isInstalled();
+        const dismissed = localStorage.getItem(STORAGE_KEYS.installDismissed);
+
+        console.log('[PWA Install] Debug:', {
+            installed,
+            dismissed,
+            isIOS: pwaInstall.isIOS(),
+            isMobile: pwaInstall.isMobile(),
+            standalone: window.matchMedia('(display-mode: standalone)').matches,
+            navigatorStandalone: window.navigator.standalone
+        });
+
+        if (installed) return false;
+        if (dismissed) return false;
         return true;
     },
 
-    showIOSInstructions: () => {
-        const bannerText = document.getElementById('installBannerText');
-        const installBtn = document.getElementById('installBtn');
-
-        bannerText.textContent = 'Instala la app en tu iPhone/iPad';
-        installBtn.textContent = 'Ver instrucciones';
+    showBanner: () => {
         document.getElementById('installBanner').style.display = '';
+        console.log('[PWA Install] Banner shown');
     },
 
     hideBanner: () => {
@@ -1658,27 +1666,34 @@ const pwaInstall = {
     },
 
     init: () => {
-        if (!pwaInstall.canShowPrompt()) return;
+        if (!pwaInstall.canShowPrompt()) {
+            console.log('[PWA Install] Cannot show prompt, skipping init');
+            return;
+        }
 
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
+            console.log('[PWA Install] beforeinstallprompt fired');
 
-            if (pwaInstall.isMobile()) {
-                document.getElementById('installBanner').style.display = '';
-            }
+            pwaInstall.showBanner();
         });
 
         window.addEventListener('appinstalled', () => {
             pwaInstall.hideBanner();
             deferredPrompt = null;
             localStorage.setItem(STORAGE_KEYS.installDismissed, 'true');
+            console.log('[PWA Install] App installed');
         });
 
-        if (pwaInstall.isIOS() && pwaInstall.isMobile() && !pwaInstall.isInstalled()) {
+        if (pwaInstall.isIOS() && !pwaInstall.isInstalled()) {
             setTimeout(() => {
                 if (pwaInstall.canShowPrompt()) {
-                    pwaInstall.showIOSInstructions();
+                    const bannerText = document.getElementById('installBannerText');
+                    const installBtn = document.getElementById('installBtn');
+                    bannerText.textContent = 'Instala la app en tu iPhone/iPad';
+                    installBtn.textContent = 'Ver instrucciones';
+                    pwaInstall.showBanner();
                 }
             }, 3000);
         }
@@ -1686,15 +1701,23 @@ const pwaInstall = {
 };
 
 async function promptInstall() {
+    console.log('[PWA Install] Install button clicked, deferredPrompt:', !!deferredPrompt);
+
     if (pwaInstall.isIOS()) {
         openIosInstallModal();
         return;
     }
 
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+        console.log('[PWA Install] No deferredPrompt available');
+        ui.showToast('La instalación no está disponible en este navegador', 'info');
+        return;
+    }
 
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
+
+    console.log('[PWA Install] User choice:', outcome);
 
     if (outcome === 'accepted') {
         pwaInstall.hideBanner();
@@ -1707,6 +1730,26 @@ function dismissInstall() {
     pwaInstall.hideBanner();
     localStorage.setItem(STORAGE_KEYS.installDismissed, 'true');
 }
+
+// Debug function - call from console: testInstallBanner()
+window.testInstallBanner = function() {
+    console.log('[PWA Install] Test banner - Debug info:', {
+        isInstalled: pwaInstall.isInstalled(),
+        isIOS: pwaInstall.isIOS(),
+        isMobile: pwaInstall.isMobile(),
+        deferredPrompt: !!deferredPrompt,
+        dismissed: localStorage.getItem(STORAGE_KEYS.installDismissed)
+    });
+    pwaInstall.showBanner();
+    return 'Banner shown. Check console for debug info.';
+};
+
+// Reset install dismissed - call from console: resetInstall()
+window.resetInstall = function() {
+    localStorage.removeItem(STORAGE_KEYS.installDismissed);
+    console.log('[PWA Install] Install dismissed flag reset. Reload to see banner.');
+    return 'Install flag reset. Reload page.';
+};
 
 function openIosInstallModal() {
     document.getElementById('iosInstallModal').classList.add('active');
@@ -2068,10 +2111,43 @@ function setupEventListeners() {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
-            .then(reg => console.log('Service Worker registered'))
-            .catch(err => console.log('Service Worker registration failed', err));
+            .then(reg => {
+                console.log('Service Worker registered:', reg.scope);
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        console.log('Service Worker state:', newWorker.state);
+                    });
+                });
+            })
+            .catch(err => console.error('Service Worker registration failed:', err));
+    });
+
+    // Check service worker status
+    navigator.serviceWorker.ready.then(reg => {
+        console.log('Service Worker is ready:', reg);
     });
 }
+
+// Check manifest link
+window.addEventListener('load', () => {
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    if (manifestLink) {
+        console.log('Manifest link found:', manifestLink.href);
+        fetch(manifestLink.href)
+            .then(response => {
+                if (response.ok) {
+                    console.log('Manifest is accessible');
+                    return response.json();
+                }
+                throw new Error('Manifest not accessible');
+            })
+            .then(manifest => console.log('Manifest content:', manifest))
+            .catch(err => console.error('Manifest error:', err));
+    } else {
+        console.error('No manifest link found in HTML');
+    }
+});
 
 // ============================================
 // START APP

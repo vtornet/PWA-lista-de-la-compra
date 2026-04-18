@@ -2498,6 +2498,9 @@ async function loadSharedLists() {
             // Reload lists to show shared ones
             await dataOps.loadLists();
             ui.renderListsGrid();
+
+            // Subscribe to realtime items changes
+            subscribeToItems();
         }
     } catch (error) {
         console.error('[Shared] Error loading shared lists:', error);
@@ -2541,6 +2544,79 @@ function unsubscribeFromInvitations() {
     if (invitationsSubscription) {
         supabaseClient.removeChannel(invitationsSubscription);
         invitationsSubscription = null;
+    }
+}
+
+// Subscribe to realtime changes for items
+let itemsSubscription = null;
+
+function subscribeToItems() {
+    console.log('[Realtime] subscribeToItems called', { authenticated: auth.isAuthenticated(), hasSubscription: !!itemsSubscription });
+    if (!auth.isAuthenticated()) return;
+
+    // Unsubscribe if already subscribed (to refresh with new lists)
+    if (itemsSubscription) {
+        supabaseClient.removeChannel(itemsSubscription);
+        itemsSubscription = null;
+    }
+
+    // Get all shared list IDs
+    const sharedListIds = appState.lists.filter(l => l.isShared).map(l => l.id);
+
+    if (sharedListIds.length === 0) {
+        console.log('[Realtime] No shared lists to subscribe to');
+        return;
+    }
+
+    console.log('[Realtime] Subscribing to items for lists:', sharedListIds);
+
+    itemsSubscription = supabaseClient
+        .channel('items-changes')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'items',
+                filter: `list_id=in.(${sharedListIds.join(',')})`
+            },
+            async (payload) => {
+                console.log('[Realtime] Item change:', payload);
+                if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+                    const newItem = payload.new;
+                    // Update local item
+                    const existingItem = await db.get(STORES.items, newItem.id);
+                    if (existingItem) {
+                        existingItem.inShoppingList = newItem.in_shopping_list !== false;
+                        existingItem.quantity = newItem.quantity;
+                        existingItem.price = newItem.price;
+                        await db.put(STORES.items, existingItem);
+                        // Reload items from IndexedDB
+                        await dataOps.loadItems(existingItem.listId);
+                        // Re-render if viewing this list
+                        if (appState.currentListId === existingItem.listId) {
+                            ui.renderItems();
+                        }
+                    }
+                } else if (payload.eventType === 'DELETE') {
+                    const deletedItem = payload.old;
+                    await db.delete(STORES.items, deletedItem.id);
+                    appState.items = appState.items.filter(i => i.id !== deletedItem.id);
+                    if (appState.currentListId === deletedItem.list_id) {
+                        ui.renderItems();
+                    }
+                }
+            }
+        )
+        .subscribe((status) => {
+            console.log('[Realtime] Items subscription status:', status);
+        });
+}
+
+function unsubscribeFromItems() {
+    if (itemsSubscription) {
+        supabaseClient.removeChannel(itemsSubscription);
+        itemsSubscription = null;
     }
 }
 

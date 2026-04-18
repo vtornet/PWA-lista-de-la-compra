@@ -35,9 +35,10 @@ lista-de-la-compra/
 ├── index.html          # Estructura HTML principal
 ├── styles.css          # TODOS los estilos
 ├── app.js              # TODA la lógica JavaScript
-├── sw.js               # Service Worker (NO MODIFICAR sin razón)
-├── manifest.json       # Manifest PWA (respetar formato)
+├── sw.js               # Service Worker (rutas relativas ./)
+├── manifest.json       # Manifest PWA (rutas relativas ./)
 ├── icon.svg            # Icono vectorial
+├── icon-*.png          # Iconos PNG (72, 96, 128, 144, 152, 192, 384, 512)
 ├── generate-icons.html # Utilidad para generar PNGs
 ├── CLAUDE.md           # Este archivo
 ├── README.md           # Documentación para usuarios
@@ -208,8 +209,39 @@ utils.escapeHtml(texto)
 
 - El Service Worker debe interceptar TODAS las peticiones navegables
 - Manifest debe tener todos los tamaños de icono
+- `start_url` y `scope` usan rutas relativas (`./`) para compatibilidad con subdirectorios
+- **IMPORTANTE**: Todas las URLs en `sw.js` y `manifest.json` deben ser relativas (`./`)
 - `start_url` debe funcionar offline
 - Probar `installability` en Lighthouse
+
+### Instalación PWA
+
+**Módulo `pwaInstall` en app.js:**
+- `pwaInstall.isInstalled()` - Detecta si la app está instalada
+- `pwaInstall.isIOS()` - Detecta dispositivos iOS
+- `pwaInstall.init()` - Inicializa la lógica de instalación
+- `deferredPrompt` - Almacena el evento `beforeinstallprompt`
+
+**Comportamiento:**
+- **Android/Chrome**: Banner inferior + botón en menú lateral
+- **iOS**: Banner con instrucciones manuales (Safari → Compartir → Añadir a inicio)
+- **Desktop**: Solo botón en menú lateral si el navegador lo permite
+- **Ya instalado**: No se muestra ningún banner
+
+**Eventos:**
+- `beforeinstallprompt` - Se dispara cuando el navegador puede instalar la app
+- `appinstalled` - Se dispara cuando el usuario instala la app
+
+**Funciones de debug (consola):**
+- `testInstallBanner()` - Muestra el banner manualmente con info de debug
+- `resetInstall()` - Resetea el flag de instalación descartada
+
+**IDs HTML relacionados:**
+- `installBanner` - Banner inferior de instalación
+- `installAppBtn` - Botón en menú lateral
+- `installBtn` - Botón del banner
+- `dismissInstallBtn` - Botón cerrar banner
+- `iosInstallModal` - Modal con instrucciones para iOS
 
 ## 14. Compatibilidad con App Android
 
@@ -284,12 +316,26 @@ chore: tareas de mantenimiento
 
 ### Service Worker no actualiza
 - DevTools > Application > Service Workers > Update on reload
-- O cambiar `CACHE_NAME` en `sw.js`
+- O cambiar `CACHE_NAME` en `sw.js` (y actualizar STATIC_CACHE, DYNAMIC_CACHE)
 
 ### Iconos no aparecen
-- Verificar que los archivos PNG existen
-- Verificar rutas en `manifest.json`
+- Verificar que los archivos PNG existen (icon-72.png, icon-96.png, ..., icon-512.png)
+- Verificar rutas en `manifest.json` (deben ser relativas: `./icon-192.png`)
 - Limpiar cache del navegador
+
+### La PWA no se instala en móvil
+- **Primera vez**: Los navegadores requieren visitar el sitio 2+ veces con varios minutos de diferencia
+- **Sin iconos PNG**: Generar con `generate-icons.html` y añadir al repositorio
+- **Rutas absolutas**: Usar siempre `./` en `manifest.json` y `sw.js`
+- **GitHub Pages**: Si el repo no es la página principal, las rutas `/` fallan
+- **iOS**: No soporta `beforeinstallprompt`, usar instrucciones manuales
+- **Debug**: Ejecutar `testInstallBanner()` en consola
+
+### App instalada abre página de error "There isn't a GitHub Pages site here"
+- El `start_url` en `manifest.json` apunta a la ruta incorrecta
+- Usar `"start_url": "./"` en lugar de `"start_url": "/"`
+- Actualizar también `STATIC_ASSETS` en `sw.js` a rutas relativas
+- Incrementar versión de cache para forzar actualización
 
 ## 19. Comandos Útiles
 
@@ -347,4 +393,4 @@ npx lighthouse http://localhost:8080 --view
 ---
 
 **Última actualización**: Abril 2026
-**Versión**: 1.1.0 (con historial de precios)
+**Versión**: 1.2.0 (con instalación PWA completa)

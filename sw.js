@@ -2,18 +2,18 @@
 // SERVICE WORKER - LISTA DE LA COMPRA PWA
 // ============================================
 
-const CACHE_NAME = 'shopping-list-pwa-v1';
-const STATIC_CACHE = 'static-v1';
-const DYNAMIC_CACHE = 'dynamic-v1';
+const CACHE_NAME = 'shopping-list-pwa-v2';
+const STATIC_CACHE = 'static-v2';
+const DYNAMIC_CACHE = 'dynamic-v2';
 
 // Assets to cache immediately
 const STATIC_ASSETS = [
-    '/',
-    '/index.html',
-    '/styles.css',
-    '/app.js',
-    '/manifest.json',
-    '/icon.svg',
+    './',
+    './index.html',
+    './styles.css',
+    './app.js',
+    './manifest.json',
+    './icon.svg',
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'
 ];
 
@@ -149,7 +149,7 @@ self.addEventListener('fetch', (event) => {
             }).catch(() => {
                 // Return a custom offline page for HTML requests
                 if (request.destination === 'document') {
-                    return caches.match('/index.html');
+                    return caches.match('./index.html');
                 }
             });
         })
@@ -196,11 +196,11 @@ self.addEventListener('sync', (event) => {
 self.addEventListener('push', (event) => {
     const options = {
         body: event.data ? event.data.text() : 'Tienes una actualización en tu lista',
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
+        icon: './icon-192.png',
+        badge: './icon-192.png',
         vibrate: [200, 100, 200],
         data: {
-            url: '/'
+            url: './'
         }
     };
 
@@ -212,6 +212,6 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     event.waitUntil(
-        clients.openWindow(event.notification.data.url || '/')
+        clients.openWindow(event.notification.data.url || './')
     );
 });

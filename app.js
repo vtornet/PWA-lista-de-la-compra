@@ -25,7 +25,7 @@ const STORAGE_KEYS = {
 const SUPABASE_URL = 'https://ezwwaepvpuurboijbsry.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_dowcVDh_7Ux-9PP9UKR9SA_u5SSPTYn';
 
-let supabase = null;
+let supabaseClient = null;
 let currentUser = null;
 
 let appState = {
@@ -272,7 +272,7 @@ const auth = {
     init() {
         try {
             if (window.supabase) {
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 console.log('[Auth] Supabase initialized');
                 // Check for existing session asynchronously
                 this.checkSession().catch(err => console.error('[Auth] Session check error:', err));
@@ -287,10 +287,10 @@ const auth = {
     },
 
     async checkSession() {
-        if (!supabase) return;
+        if (!supabaseClient) return;
 
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await supabaseClient.auth.getSession();
             if (session) {
                 currentUser = session.user;
                 console.log('[Auth] User logged in:', currentUser.email);
@@ -304,7 +304,7 @@ const auth = {
 
     async signUp(email, password) {
         try {
-            const { data, error } = await supabase.auth.signUp({
+            const { data, error } = await supabaseClient.auth.signUp({
                 email,
                 password
             });
@@ -328,7 +328,7 @@ const auth = {
 
     async signIn(email, password) {
         try {
-            const { data, error } = await supabase.auth.signInWithPassword({
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
                 email,
                 password
             });
@@ -355,7 +355,7 @@ const auth = {
         try {
             unsubscribeFromInvitations();
             itemsSync.unsubscribe();
-            await supabase.auth.signOut();
+            await supabaseClient.auth.signOut();
             currentUser = null;
             this.updateAuthUI();
             ui.showToast('Sesión cerrada', 'success');
@@ -370,7 +370,7 @@ const auth = {
 
     async createProfile(userId, email) {
         try {
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('profiles')
                 .insert({ id: userId, email });
 
@@ -389,7 +389,7 @@ const auth = {
         if (!currentUser) return null;
 
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('profiles')
                 .select('*')
                 .eq('id', currentUser.id)
@@ -818,11 +818,11 @@ Object.assign(itemsSync, {
     subscription: null,
 
     subscribe(listId) {
-        if (!supabase || !auth.isAuthenticated()) return;
+        if (!supabaseClient || !auth.isAuthenticated()) return;
 
         this.unsubscribe();
 
-        this.subscription = supabase
+        this.subscription = supabaseClient
             .channel(`items-${listId}`)
             .on(
                 'postgres_changes',
@@ -845,16 +845,16 @@ Object.assign(itemsSync, {
 
     unsubscribe() {
         if (this.subscription) {
-            supabase.removeChannel(this.subscription);
+            supabaseClient.removeChannel(this.subscription);
             this.subscription = null;
         }
     },
 
     async loadItems(listId) {
-        if (!supabase || !auth.isAuthenticated()) return;
+        if (!supabaseClient || !auth.isAuthenticated()) return;
 
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('items')
                 .select('*')
                 .eq('list_id', listId);
@@ -883,13 +883,13 @@ Object.assign(itemsSync, {
     },
 
     async syncItem(item) {
-        if (!supabase || !auth.isAuthenticated()) return;
+        if (!supabaseClient || !auth.isAuthenticated()) return;
 
         const list = appState.lists.find(l => l.id === item.listId);
         if (!list?.isShared) return;
 
         try {
-            await supabase
+            await supabaseClient
                 .from('items')
                 .upsert({
                     id: item.id,
@@ -907,14 +907,14 @@ Object.assign(itemsSync, {
     },
 
     async deleteItem(itemId) {
-        if (!supabase || !auth.isAuthenticated()) return;
+        if (!supabaseClient || !auth.isAuthenticated()) return;
 
         const item = appState.items.find(i => i.id === itemId);
         const list = item ? appState.lists.find(l => l.id === item.listId) : null;
         if (!list?.isShared) return;
 
         try {
-            await supabase
+            await supabaseClient
                 .from('items')
                 .delete()
                 .eq('id', itemId);
@@ -2211,7 +2211,7 @@ async function loadListMembers(listId) {
 
     try {
         // Get members from Supabase
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('list_members')
             .select('*, profiles!inner(email)')
             .eq('list_id', listId);
@@ -2275,7 +2275,7 @@ window.removeMember = async function(memberId) {
     if (!confirm('¿Eliminar a este usuario de la lista?')) return;
 
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('list_members')
             .delete()
             .eq('id', memberId);
@@ -2308,7 +2308,7 @@ async function handleShareListSubmit(e) {
     // Find user by email
     try {
         // First, find the user's profile by email
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile, error: profileError } = await supabaseClient
             .from('profiles')
             .select('id')
             .eq('email', email)
@@ -2320,7 +2320,7 @@ async function handleShareListSubmit(e) {
         }
 
         // Check if already a member
-        const { data: existingMember, error: checkError } = await supabase
+        const { data: existingMember, error: checkError } = await supabaseClient
             .from('list_members')
             .select('*')
             .eq('list_id', currentShareListId)
@@ -2333,7 +2333,7 @@ async function handleShareListSubmit(e) {
         }
 
         // Create invitation
-        const { error: inviteError } = await supabase
+        const { error: inviteError } = await supabaseClient
             .from('list_members')
             .insert({
                 list_id: currentShareListId,
@@ -2364,7 +2364,7 @@ async function loadSharedLists() {
     if (!auth.isAuthenticated()) return;
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('list_members')
             .select('*')
             .eq('user_id', currentUser.id)
@@ -2403,7 +2403,7 @@ let invitationsSubscription = null;
 function subscribeToInvitations() {
     if (!auth.isAuthenticated() || invitationsSubscription) return;
 
-    invitationsSubscription = supabase
+    invitationsSubscription = supabaseClient
         .channel('invitations-changes')
         .on(
             'postgres_changes',
@@ -2431,7 +2431,7 @@ function subscribeToInvitations() {
 
 function unsubscribeFromInvitations() {
     if (invitationsSubscription) {
-        supabase.removeChannel(invitationsSubscription);
+        supabaseClient.removeChannel(invitationsSubscription);
         invitationsSubscription = null;
     }
 }
@@ -2440,7 +2440,7 @@ async function loadPendingInvitations() {
     if (!auth.isAuthenticated()) return;
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('list_members')
             .select('*, profiles!inner(email)')
             .eq('user_id', currentUser.id)
@@ -2482,7 +2482,7 @@ function renderInvitations(invitations) {
 
 async function respondToInvitation(memberId, response) {
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('list_members')
             .update({ status: response })
             .eq('id', memberId)

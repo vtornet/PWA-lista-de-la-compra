@@ -2366,13 +2366,18 @@ async function handleShareListSubmit(e) {
         }
 
         // Create invitation
+        // Get the list name
+        const currentList = appState.lists.find(l => l.id === currentShareListId);
+        const listName = currentList ? currentList.name : 'Lista compartida';
+
         const { error: inviteError } = await supabaseClient
             .from('list_members')
             .insert({
                 list_id: currentShareListId,
                 user_id: profile.id,
                 role: role,
-                status: 'pending'
+                status: 'pending',
+                list_name: listName
             });
 
         if (inviteError) {
@@ -2409,16 +2414,24 @@ async function loadSharedLists() {
             for (const member of data) {
                 // Check if list already exists locally
                 const localList = await db.get(STORES.lists, member.list_id);
+                const listName = member.list_name || `Lista compartida (${member.list_id.slice(0, 8)})`;
+
                 if (!localList) {
-                    // List doesn't exist locally, create placeholder
+                    // List doesn't exist locally, create with real name
                     await db.put(STORES.lists, {
                         id: member.list_id,
-                        name: `Lista compartida (${member.list_id.slice(0, 8)})`,
+                        name: listName,
                         createdAt: Date.now(),
                         updatedAt: Date.now(),
                         isShared: true,
                         sharedRole: member.role
                     });
+                } else if (localList.name !== listName) {
+                    // Update name if it has changed
+                    localList.name = listName;
+                    localList.isShared = true;
+                    localList.sharedRole = member.role;
+                    await db.put(STORES.lists, localList);
                 }
             }
             // Reload lists to show shared ones

@@ -10,7 +10,6 @@
     <meta name="apple-mobile-web-app-title" content="Lista de Compra">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icon.svg">
-    <link rel="apple-touch-icon" href="icon-192.png">
     <title>Lista de la Compra</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -357,6 +356,20 @@
                     <h3>Sincronización</h3>
                     <p class="sync-text">
                         Actualmente los datos se guardan localmente. Para compartir listas, usa el botón "Compartir" en cada lista.
+                    </p>
+                </div>
+
+                <!-- Install App -->
+                <div class="install-section">
+                    <h3>Instalar app</h3>
+                    <button class="btn btn-primary btn-full" id="installAppBtn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Instalar aplicación
+                    </button>
+                    <p class="install-hint" id="installHint">
+                        Instala la app en tu dispositivo para usarla offline
                     </p>
                 </div>
 

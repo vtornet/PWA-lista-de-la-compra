@@ -1666,10 +1666,8 @@ const pwaInstall = {
     },
 
     init: () => {
-        if (!pwaInstall.canShowPrompt()) {
-            console.log('[PWA Install] Cannot show prompt, skipping init');
-            return;
-        }
+        // Always set up listeners, regardless of current state
+        pwaInstall.updateMenuButton();
 
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
@@ -1677,6 +1675,7 @@ const pwaInstall = {
             console.log('[PWA Install] beforeinstallprompt fired');
 
             pwaInstall.showBanner();
+            pwaInstall.updateMenuButton(true);
         });
 
         window.addEventListener('appinstalled', () => {
@@ -1684,6 +1683,7 @@ const pwaInstall = {
             deferredPrompt = null;
             localStorage.setItem(STORAGE_KEYS.installDismissed, 'true');
             console.log('[PWA Install] App installed');
+            pwaInstall.updateMenuButton(false);
         });
 
         if (pwaInstall.isIOS() && !pwaInstall.isInstalled()) {
@@ -1696,6 +1696,33 @@ const pwaInstall = {
                     pwaInstall.showBanner();
                 }
             }, 3000);
+        }
+    },
+
+    updateMenuButton: (canInstall = false) => {
+        const btn = document.getElementById('installAppBtn');
+        const hint = document.getElementById('installHint');
+
+        if (!btn) return;
+
+        if (pwaInstall.isInstalled()) {
+            btn.style.display = 'none';
+            if (hint) hint.textContent = 'La app ya está instalada en este dispositivo';
+            return;
+        }
+
+        if (pwaInstall.isIOS()) {
+            btn.disabled = false;
+            if (hint) hint.textContent = 'Ver instrucciones para instalar en iPhone/iPad';
+            return;
+        }
+
+        if (canInstall || deferredPrompt) {
+            btn.disabled = false;
+            if (hint) hint.textContent = 'Instala la app en tu dispositivo para usarla offline';
+        } else {
+            btn.disabled = true;
+            if (hint) hint.textContent = 'La instalación no está disponible en este navegador';
         }
     }
 };
@@ -2091,6 +2118,9 @@ function setupEventListeners() {
     // Install banner
     document.getElementById('installBtn').addEventListener('click', promptInstall);
     document.getElementById('dismissInstallBtn').addEventListener('click', dismissInstall);
+
+    // Install menu button
+    document.getElementById('installAppBtn').addEventListener('click', promptInstall);
 
     // iOS install modal
     document.getElementById('iosInstallModalOverlay').addEventListener('click', closeIosInstallModal);

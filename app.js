@@ -2134,8 +2134,10 @@ function closeIosInstallModal() {
 let authMode = 'login'; // 'login' or 'signup'
 
 function openAuthModal(mode = 'login') {
+    console.log('[Auth] openAuthModal called with mode:', mode);
     authMode = mode;
     const modal = document.getElementById('authModal');
+    console.log('[Auth] modal element:', modal);
     const title = document.getElementById('authModalTitle');
     const toggleBtn = document.getElementById('authToggleMode');
     const submitBtn = document.getElementById('authSubmitBtn');
@@ -2855,7 +2857,15 @@ function setupEventListeners() {
     document.getElementById('closeIosInstallModal').addEventListener('click', closeIosInstallModal);
 
     // Auth modal
-    document.getElementById('loginBtn').addEventListener('click', () => openAuthModal('login'));
+    console.log('[Setup] Adding auth event listeners...');
+    const loginBtn = document.getElementById('loginBtn');
+    console.log('[Setup] loginBtn element:', loginBtn);
+    if (loginBtn) {
+        loginBtn.addEventListener('click', () => {
+            console.log('[LoginBtn] Clicked!');
+            openAuthModal('login');
+        });
+    }
     document.getElementById('logoutBtn').addEventListener('click', () => auth.signOut());
     document.getElementById('authModalOverlay').addEventListener('click', closeAuthModal);
     document.getElementById('closeAuthModal').addEventListener('click', closeAuthModal);

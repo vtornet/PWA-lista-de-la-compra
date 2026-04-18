@@ -309,6 +309,8 @@ const auth = {
                 await this.createProfile(data.user.id, email);
                 currentUser = data.user;
                 this.updateAuthUI();
+                // New user won't have shared lists yet, but set up subscription
+                subscribeToInvitations();
                 return { success: true };
             }
         } catch (error) {
@@ -330,6 +332,10 @@ const auth = {
                 currentUser = data.user;
                 this.updateAuthUI();
                 await this.loadUserProfile();
+                // Load shared data
+                await loadSharedLists();
+                await loadPendingInvitations();
+                subscribeToInvitations();
                 return { success: true };
             }
         } catch (error) {
@@ -340,10 +346,15 @@ const auth = {
 
     async signOut() {
         try {
+            unsubscribeFromInvitations();
             await supabase.auth.signOut();
             currentUser = null;
             this.updateAuthUI();
             ui.showToast('Sesión cerrada', 'success');
+            // Reload to clear shared lists
+            await dataOps.loadLists();
+            ui.renderListsGrid();
+            document.getElementById('invitationsSection').style.display = 'none';
         } catch (error) {
             console.error('[Auth] Sign out failed:', error);
         }
@@ -1012,9 +1023,24 @@ const ui = {
         allItems.then(listCounts => {
             container.innerHTML = appState.lists.map(list => {
                 const itemCount = listCounts[list.id] || 0;
+                const isShared = list.isShared || false;
+                const sharedBadge = isShared ? `
+                    <span class="list-shared-badge">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="18" cy="5" r="3"/>
+                            <circle cx="6" cy="12" r="3"/>
+                            <circle cx="18" cy="19" r="3"/>
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                        </svg>
+                        Compartida
+                    </span>
+                ` : '';
+
                 return `
-                    <div class="list-card" data-list-id="${list.id}">
+                    <div class="list-card ${isShared ? 'shared' : ''}" data-list-id="${list.id}">
                         <div class="list-card-actions">
+                            ${!isShared ? `
                             <button class="list-card-action-btn share" data-list-id="${list.id}" aria-label="Compartir">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <circle cx="18" cy="5" r="3"/>
@@ -1024,17 +1050,20 @@ const ui = {
                                     <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
                                 </svg>
                             </button>
+                            ` : ''}
                             <button class="list-card-action-btn edit" data-list-id="${list.id}" aria-label="Editar">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                                     <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                                 </svg>
                             </button>
+                            ${!isShared ? `
                             <button class="list-card-action-btn delete" data-list-id="${list.id}" aria-label="Eliminar">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                                 </svg>
                             </button>
+                            ` : ''}
                         </div>
                         <div class="list-card-icon">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1043,6 +1072,7 @@ const ui = {
                         </div>
                         <div class="list-card-name">${utils.escapeHtml(list.name)}</div>
                         <div class="list-card-meta">
+                            ${sharedBadge}
                             <span class="list-card-count">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
@@ -2021,28 +2051,87 @@ async function loadListMembers(listId) {
     membersList.innerHTML = '<p style="font-size: var(--font-size-sm); color: var(--text-secondary);">Cargando miembros...</p>';
 
     try {
-        // Get local list members (from IndexedDB) and Supabase members
+        // Get members from Supabase
+        const { data, error } = await supabase
+            .from('list_members')
+            .select('*, profiles!inner(email)')
+            .eq('list_id', listId);
+
+        if (error) {
+            // If not logged in or error, show placeholder
+            membersList.innerHTML = '<p style="font-size: var(--font-size-sm); color: var(--text-secondary);">Inicia sesión para ver miembros</p>';
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            membersList.innerHTML = '<p style="font-size: var(--font-size-sm); color: var(--text-secondary);">No hay miembros añadidos</p>';
+            return;
+        }
+
+        // Get local list for owner info
         const localLists = await db.getAll(STORES.lists);
         const localList = localLists.find(l => l.id === listId);
 
-        // For now, show owner info
         let membersHTML = '';
-        if (localList) {
-            membersHTML = `
+
+        // Add owner (you)
+        if (currentUser && localList) {
+            membersHTML += `
                 <div class="list-member-item">
-                    <span class="list-member-email">${localList.name} (propietario)</span>
+                    <span class="list-member-email">${currentUser.email} (Tú)</span>
                     <span class="list-member-role">Owner</span>
                 </div>
             `;
         }
 
-        // TODO: Load from Supabase when implemented
-        membersList.innerHTML = membersHTML || '<p style="font-size: var(--font-size-sm); color: var(--text-secondary);">No hay miembros añadidos</p>';
+        // Add other members
+        data.forEach(member => {
+            if (member.user_id !== currentUser?.id) {
+                const roleLabel = member.role === 'editor' ? 'Puede editar' : 'Solo ver';
+                membersHTML += `
+                    <div class="list-member-item">
+                        <span class="list-member-email">${member.profiles.email}</span>
+                        <span class="list-member-role">${roleLabel}</span>
+                        ${member.role === 'viewer' ? `
+                            <button class="list-member-remove" onclick="removeMember('${member.id}')" aria-label="Eliminar miembro">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 6L6 18M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+            }
+        });
+
+        membersList.innerHTML = membersHTML;
     } catch (error) {
         console.error('[Share] Error loading members:', error);
         membersList.innerHTML = '<p style="font-size: var(--font-size-sm); color: var(--danger);">Error al cargar miembros</p>';
     }
 }
+
+// Make it global
+window.removeMember = async function(memberId) {
+    if (!confirm('¿Eliminar a este usuario de la lista?')) return;
+
+    try {
+        const { error } = await supabase
+            .from('list_members')
+            .delete()
+            .eq('id', memberId);
+
+        if (error) throw error;
+
+        ui.showToast('Miembro eliminado', 'success');
+        if (currentShareListId) {
+            loadListMembers(currentShareListId);
+        }
+    } catch (error) {
+        console.error('[Share] Error removing member:', error);
+        ui.showToast('Error al eliminar miembro', 'error');
+    }
+};
 
 async function handleShareListSubmit(e) {
     e.preventDefault();
@@ -2057,10 +2146,55 @@ async function handleShareListSubmit(e) {
     const email = document.getElementById('shareEmail').value;
     const role = document.getElementById('shareRole').value;
 
-    // TODO: Implement Supabase invite
-    // For now, show a message
-    ui.showToast(`Invitación enviada a ${email}`, 'success');
-    closeShareListModal();
+    // Find user by email
+    try {
+        // First, find the user's profile by email
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', email)
+            .single();
+
+        if (profileError || !profile) {
+            ui.showToast('Usuario no encontrado. Debe estar registrado.', 'warning');
+            return;
+        }
+
+        // Check if already a member
+        const { data: existingMember, error: checkError } = await supabase
+            .from('list_members')
+            .select('*')
+            .eq('list_id', currentShareListId)
+            .eq('user_id', profile.id)
+            .single();
+
+        if (existingMember) {
+            ui.showToast('Este usuario ya tiene acceso a esta lista', 'info');
+            return;
+        }
+
+        // Create invitation
+        const { error: inviteError } = await supabase
+            .from('list_members')
+            .insert({
+                list_id: currentShareListId,
+                user_id: profile.id,
+                role: role,
+                status: 'pending'
+            });
+
+        if (inviteError) {
+            throw inviteError;
+        }
+
+        ui.showToast(`Invitación enviada a ${email}`, 'success');
+        closeShareListModal();
+        loadListMembers(currentShareListId);
+
+    } catch (error) {
+        console.error('[Share] Error sending invitation:', error);
+        ui.showToast('Error al enviar la invitación', 'error');
+    }
 }
 
 // ============================================
@@ -2073,16 +2207,73 @@ async function loadSharedLists() {
     try {
         const { data, error } = await supabase
             .from('list_members')
-            .select('*, profiles!inner(email)')
+            .select('*')
             .eq('user_id', currentUser.id)
             .eq('status', 'accepted');
 
         if (!error && data) {
             console.log('[Shared] Loaded shared lists:', data);
-            // TODO: Sync shared lists with local IndexedDB
+            // Sync shared lists with local IndexedDB
+            for (const member of data) {
+                // Check if list already exists locally
+                const localList = await db.get(STORES.lists, member.list_id);
+                if (!localList) {
+                    // List doesn't exist locally, create placeholder
+                    await db.put(STORES.lists, {
+                        id: member.list_id,
+                        name: `Lista compartida (${member.list_id.slice(0, 8)})`,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        isShared: true,
+                        sharedRole: member.role
+                    });
+                }
+            }
+            // Reload lists to show shared ones
+            await dataOps.loadLists();
+            ui.renderListsGrid();
         }
     } catch (error) {
         console.error('[Shared] Error loading shared lists:', error);
+    }
+}
+
+// Subscribe to realtime changes for invitations
+let invitationsSubscription = null;
+
+function subscribeToInvitations() {
+    if (!auth.isAuthenticated() || invitationsSubscription) return;
+
+    invitationsSubscription = supabase
+        .channel('invitations-changes')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'list_members',
+                filter: `user_id=eq.${currentUser.id}`
+            },
+            (payload) => {
+                console.log('[Realtime] Invitation change:', payload);
+                if (payload.eventType === 'INSERT') {
+                    loadPendingInvitations();
+                } else if (payload.eventType === 'UPDATE') {
+                    loadPendingInvitations();
+                } else if (payload.eventType === 'DELETE') {
+                    loadPendingInvitations();
+                }
+            }
+        )
+        .subscribe((status) => {
+            console.log('[Realtime] Invitations subscription status:', status);
+        });
+}
+
+function unsubscribeFromInvitations() {
+    if (invitationsSubscription) {
+        supabase.removeChannel(invitationsSubscription);
+        invitationsSubscription = null;
     }
 }
 
@@ -2185,9 +2376,11 @@ async function init() {
         setupEventListeners();
         handleInstallPrompt();
 
-        // Load shared lists if logged in
+        // Load shared lists and invitations if logged in
         if (auth.isAuthenticated()) {
             await loadSharedLists();
+            await loadPendingInvitations();
+            subscribeToInvitations();
         }
 
     } catch (error) {

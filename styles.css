@@ -1942,6 +1942,23 @@ button:focus-visible,
     gap: 0.25rem;
 }
 
+.list-shared-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 2px var(--spacing-xs);
+    background-color: var(--primary-light);
+    color: var(--primary);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.list-card.shared {
+    border-color: var(--primary);
+    background-color: var(--primary-light);
+}
+
 .list-card-actions {
     position: absolute;
     top: var(--spacing-sm);

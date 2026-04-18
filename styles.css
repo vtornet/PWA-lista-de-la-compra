@@ -1032,6 +1032,22 @@ img, picture {
     border-top: 1px solid var(--border-color);
 }
 
+.auth-section:not(.logged-in) #authLoggedOut {
+    display: block;
+}
+
+.auth-section:not(.logged-in) #authLoggedIn {
+    display: none;
+}
+
+.auth-section.logged-in #authLoggedOut {
+    display: none;
+}
+
+.auth-section.logged-in #authLoggedIn {
+    display: block;
+}
+
 .auth-section h3 {
     font-size: var(--font-size-sm);
     font-weight: 600;

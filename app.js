@@ -412,17 +412,12 @@ const auth = {
         const authSection = document.getElementById('authSection');
         const userEmailSpan = document.getElementById('userEmail');
 
-        console.log('[Auth] updateAuthUI - currentUser:', currentUser);
-        console.log('[Auth] updateAuthUI - userEmailSpan:', userEmailSpan);
-        console.log('[Auth] updateAuthUI - authSection:', authSection);
-
         if (!authSection) return;
 
         if (currentUser) {
             authSection.classList.add('logged-in');
             if (userEmailSpan) {
                 userEmailSpan.textContent = currentUser.email;
-                console.log('[Auth] Email set to:', currentUser.email);
             }
         } else {
             authSection.classList.remove('logged-in');
@@ -2143,10 +2138,8 @@ function closeIosInstallModal() {
 let authMode = 'login'; // 'login' or 'signup'
 
 function openAuthModal(mode = 'login') {
-    console.log('[Auth] openAuthModal called with mode:', mode);
     authMode = mode;
     const modal = document.getElementById('authModal');
-    console.log('[Auth] modal element:', modal);
     const title = document.getElementById('authModalTitle');
     const toggleBtn = document.getElementById('authToggleMode');
     const submitBtn = document.getElementById('authSubmitBtn');
@@ -2866,15 +2859,7 @@ function setupEventListeners() {
     document.getElementById('closeIosInstallModal').addEventListener('click', closeIosInstallModal);
 
     // Auth modal
-    console.log('[Setup] Adding auth event listeners...');
-    const loginBtn = document.getElementById('loginBtn');
-    console.log('[Setup] loginBtn element:', loginBtn);
-    if (loginBtn) {
-        loginBtn.addEventListener('click', () => {
-            console.log('[LoginBtn] Clicked!');
-            openAuthModal('login');
-        });
-    }
+    document.getElementById('loginBtn').addEventListener('click', () => openAuthModal('login'));
     document.getElementById('logoutBtn').addEventListener('click', () => auth.signOut());
     document.getElementById('authModalOverlay').addEventListener('click', closeAuthModal);
     document.getElementById('closeAuthModal').addEventListener('click', closeAuthModal);

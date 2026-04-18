@@ -2404,8 +2404,8 @@ async function handleShareListSubmit(e) {
                     price: item.price,
                     image_url: item.imageUrl,
                     in_shopping_list: item.inShoppingList,
-                    created_at: item.createdAt || Date.now(),
-                    updated_at: Date.now(),
+                    created_at: new Date(item.createdAt || Date.now()).toISOString(),
+                    updated_at: new Date().toISOString(),
                     created_by: currentUser.id
                 });
 

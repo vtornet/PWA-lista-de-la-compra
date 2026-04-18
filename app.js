@@ -481,27 +481,54 @@ let itemsSync = {
 const dataOps = {
     async loadLists() {
         appState.lists = await db.getAll(STORES.lists);
-        appState.lists.sort((a, b) => a.name.localeCompare(b.name));
 
-        // Check if any list has items in Supabase and mark as shared
-        if (auth.isAuthenticated()) {
-            for (const list of appState.lists) {
-                if (!list.isShared) {
-                    // Check if this list has items in Supabase
-                    const { data, error } = await supabaseClient
-                        .from('items')
-                        .select('id')
-                        .eq('list_id', list.id)
-                        .limit(1);
+        // If authenticated, sync lists with Supabase
+        if (auth.isAuthenticated() && supabaseClient) {
+            try {
+                // Get lists from Supabase (owned or shared)
+                const { data: supabaseLists, error } = await supabaseClient
+                    .from('lists')
+                    .select('*');
 
-                    if (data && data.length > 0) {
-                        console.log('[DataOps] List', list.name, 'has items in Supabase, marking as shared');
-                        list.isShared = true;
-                        await db.put(STORES.lists, list);
+                if (!error && supabaseLists) {
+                    console.log('[DataOps] Loaded', supabaseLists.length, 'lists from Supabase');
+
+                    // Merge Supabase lists with local lists
+                    for (const sbList of supabaseLists) {
+                        const localList = appState.lists.find(l => l.id === sbList.id);
+
+                        if (!localList) {
+                            // List exists in Supabase but not locally, add it
+                            const newList = {
+                                id: sbList.id,
+                                name: sbList.name,
+                                createdAt: new Date(sbList.created_at).getTime(),
+                                updatedAt: new Date(sbList.updated_at).getTime(),
+                                isShared: sbList.is_shared || false
+                            };
+                            await db.put(STORES.lists, newList);
+                            appState.lists.push(newList);
+                        } else {
+                            // Update local list with Supabase data if newer
+                            const sbUpdatedAt = new Date(sbList.updated_at).getTime();
+                            if (sbUpdatedAt > localList.updatedAt) {
+                                localList.name = sbList.name;
+                                localList.updatedAt = sbUpdatedAt;
+                                localList.isShared = sbList.is_shared || false;
+                                await db.put(STORES.lists, localList);
+                            }
+                        }
                     }
                 }
+            } catch (error) {
+                console.error('[DataOps] Error loading lists from Supabase:', error);
             }
+
+            // Load shared lists from list_members
+            await loadSharedLists();
         }
+
+        appState.lists.sort((a, b) => a.name.localeCompare(b.name));
     },
 
     async loadItems(listId) {
@@ -531,9 +558,29 @@ const dataOps = {
             createdAt: Date.now(),
             updatedAt: Date.now()
         };
+
+        // Save locally first
         await db.add(STORES.lists, list);
         appState.lists.push(list);
         appState.lists.sort((a, b) => a.name.localeCompare(b.name));
+
+        // Sync to Supabase if authenticated
+        if (auth.isAuthenticated() && supabaseClient) {
+            try {
+                await supabaseClient.from('lists').insert({
+                    id: list.id,
+                    name: list.name,
+                    owner_id: currentUser.id,
+                    created_at: new Date(list.createdAt).toISOString(),
+                    updated_at: new Date(list.updatedAt).toISOString(),
+                    is_shared: false
+                });
+                console.log('[DataOps] List synced to Supabase:', list.name);
+            } catch (error) {
+                console.error('[DataOps] Error syncing list to Supabase:', error);
+            }
+        }
+
         return list;
     },
 
@@ -544,10 +591,42 @@ const dataOps = {
             list.updatedAt = Date.now();
             await db.put(STORES.lists, list);
             appState.lists.sort((a, b) => a.name.localeCompare(b.name));
+
+            // Sync to Supabase if authenticated
+            if (auth.isAuthenticated() && supabaseClient) {
+                try {
+                    await supabaseClient.from('lists').update({
+                        name: list.name,
+                        updated_at: new Date(list.updatedAt).toISOString()
+                    }).eq('id', list.id).eq('owner_id', currentUser.id);
+                } catch (error) {
+                    console.error('[DataOps] Error updating list in Supabase:', error);
+                }
+            }
         }
     },
 
     async deleteList(id) {
+        // Check if this is a shared list where user is not owner
+        if (auth.isAuthenticated() && supabaseClient) {
+            try {
+                // Remove from list_members if user is a member
+                await supabaseClient.from('list_members')
+                    .delete()
+                    .eq('list_id', id)
+                    .eq('user_id', currentUser.id);
+
+                // Delete from Supabase if user is owner
+                await supabaseClient.from('lists')
+                    .delete()
+                    .eq('id', id)
+                    .eq('owner_id', currentUser.id);
+            } catch (error) {
+                console.error('[DataOps] Error deleting list from Supabase:', error);
+            }
+        }
+
+        // Delete locally
         await db.delete(STORES.lists, id);
         await db.deleteByIndex(STORES.items, 'listId', id);
         await db.deleteByIndex(STORES.history, 'listId', id);
@@ -949,7 +1028,6 @@ Object.assign(itemsSync, {
 
         const list = appState.lists.find(l => l.id === item.listId);
         console.log('[ItemsSync] syncItem called for:', item.name, 'list.isShared:', list?.isShared);
-        if (!list?.isShared) return;
 
         try {
             const { error } = await supabaseClient
@@ -981,8 +1059,7 @@ Object.assign(itemsSync, {
         if (!supabaseClient || !auth.isAuthenticated()) return;
 
         const item = appState.items.find(i => i.id === itemId);
-        const list = item ? appState.lists.find(l => l.id === item.listId) : null;
-        if (!list?.isShared) return;
+        if (!item) return;
 
         try {
             await supabaseClient

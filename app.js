@@ -295,7 +295,7 @@ const auth = {
                 currentUser = session.user;
                 console.log('[Auth] User logged in:', currentUser.email);
                 this.updateAuthUI();
-                // Profile load skipped for now - configure RLS policies in Supabase dashboard
+                await this.loadUserProfile();
             }
         } catch (error) {
             console.error('[Auth] Session check failed:', error);
@@ -317,10 +317,11 @@ const auth = {
 
             if (data.user) {
                 // Create profile record
-                // await this.createProfile(data.user.id, email);
+                await this.createProfile(data.user.id, email);
                 currentUser = data.user;
                 this.updateAuthUI();
-                // Shared lists skipped for now
+                // New user won't have shared lists yet, but set up subscription
+                subscribeToInvitations();
                 return { success: true };
             }
         } catch (error) {
@@ -341,10 +342,11 @@ const auth = {
             if (data.user) {
                 currentUser = data.user;
                 this.updateAuthUI();
-                // Profile and shared lists skipped for now - configure Supabase tables first
-                // await loadSharedLists();
-                // await loadPendingInvitations();
-                // subscribeToInvitations();
+                await this.loadUserProfile();
+                // Load shared data
+                await loadSharedLists();
+                await loadPendingInvitations();
+                subscribeToInvitations();
                 return { success: true };
             }
         } catch (error) {

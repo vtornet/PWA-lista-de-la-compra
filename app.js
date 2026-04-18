@@ -412,12 +412,17 @@ const auth = {
         const authSection = document.getElementById('authSection');
         const userEmailSpan = document.getElementById('userEmail');
 
+        console.log('[Auth] updateAuthUI - currentUser:', currentUser);
+        console.log('[Auth] updateAuthUI - userEmailSpan:', userEmailSpan);
+        console.log('[Auth] updateAuthUI - authSection:', authSection);
+
         if (!authSection) return;
 
         if (currentUser) {
             authSection.classList.add('logged-in');
             if (userEmailSpan) {
                 userEmailSpan.textContent = currentUser.email;
+                console.log('[Auth] Email set to:', currentUser.email);
             }
         } else {
             authSection.classList.remove('logged-in');

@@ -2375,11 +2375,39 @@ async function handleShareListSubmit(e) {
                 list_id: currentShareListId,
                 user_id: profile.id,
                 role: role,
-                status: 'pending'
+                status: 'pending',
+                list_name: appState.lists.find(l => l.id === currentShareListId)?.name || 'Lista compartida',
+                created_by: currentUser.id
             });
 
         if (inviteError) {
             throw inviteError;
+        }
+
+        // Upload all items from this list to Supabase
+        const listItems = appState.items.filter(i => i.listId === currentShareListId);
+        for (const item of listItems) {
+            await supabaseClient
+                .from('items')
+                .upsert({
+                    id: item.id,
+                    name: item.name,
+                    list_id: item.listId,
+                    quantity: item.quantity,
+                    price: item.price,
+                    image_url: item.imageUrl,
+                    in_shopping_list: item.inShoppingList,
+                    created_at: item.createdAt || Date.now(),
+                    updated_at: Date.now(),
+                    created_by: currentUser.id
+                });
+        }
+
+        // Mark list as shared locally
+        const currentList = appState.lists.find(l => l.id === currentShareListId);
+        if (currentList) {
+            currentList.isShared = true;
+            await db.put(STORES.lists, currentList);
         }
 
         ui.showToast(`Invitación enviada a ${email}`, 'success');

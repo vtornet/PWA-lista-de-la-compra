@@ -2357,27 +2357,21 @@ async function handleShareListSubmit(e) {
             .from('list_members')
             .select('*')
             .eq('list_id', currentShareListId)
-            .eq('user_id', profile.id)
-            .single();
+            .eq('user_id', profile.id);
 
-        if (existingMember) {
+        if (existingMember && existingMember.length > 0) {
             ui.showToast('Este usuario ya tiene acceso a esta lista', 'info');
             return;
         }
 
         // Create invitation
-        // Get the list name
-        const currentList = appState.lists.find(l => l.id === currentShareListId);
-        const listName = currentList ? currentList.name : 'Lista compartida';
-
         const { error: inviteError } = await supabaseClient
             .from('list_members')
             .insert({
                 list_id: currentShareListId,
                 user_id: profile.id,
                 role: role,
-                status: 'pending',
-                list_name: listName
+                status: 'pending'
             });
 
         if (inviteError) {
@@ -2410,6 +2404,26 @@ async function loadSharedLists() {
 
         if (!error && data) {
             console.log('[Shared] Loaded shared lists:', data);
+
+            // Get the list IDs from Supabase
+            const sharedListIds = new Set(data.map(member => member.list_id));
+
+            // Remove local shared lists that no longer exist in Supabase
+            const localLists = await db.getAll(STORES.lists);
+            for (const localList of localLists) {
+                if (localList.isShared && !sharedListIds.has(localList.id)) {
+                    console.log('[Shared] Removing stale shared list:', localList.id);
+                    await db.delete(STORES.lists, localList.id);
+                    // Also remove items from this list
+                    const listItems = await db.getAll(STORES.items);
+                    for (const item of listItems) {
+                        if (item.listId === localList.id) {
+                            await db.delete(STORES.items, item.id);
+                        }
+                    }
+                }
+            }
+
             // Sync shared lists with local IndexedDB
             for (const member of data) {
                 // Check if list already exists locally
@@ -2426,6 +2440,8 @@ async function loadSharedLists() {
                         isShared: true,
                         sharedRole: member.role
                     });
+                    // Load items from Supabase for this new shared list
+                    await itemsSync.loadItems(member.list_id);
                 } else if (localList.name !== listName) {
                     // Update name if it has changed
                     localList.name = listName;

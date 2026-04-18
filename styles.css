@@ -1424,6 +1424,54 @@ img, picture {
     color: var(--text-primary);
 }
 
+/* iOS Install Instructions */
+.ios-instructions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+}
+
+.ios-step {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: flex-start;
+}
+
+.ios-step-number {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.ios-step-content {
+    flex: 1;
+    padding-top: 2px;
+}
+
+.ios-step-content p {
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.ios-install-preview {
+    display: flex;
+    justify-content: center;
+    padding: var(--spacing-md);
+    background-color: var(--bg-primary);
+    border-radius: var(--radius-md);
+    margin-top: var(--spacing-md);
+}
+
 /* ============================================
    UTILITY CLASSES
    ============================================ */

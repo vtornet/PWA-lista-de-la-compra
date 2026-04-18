@@ -553,7 +553,7 @@
                     </svg>
                 </div>
                 <div class="install-text">
-                    <p>Instala la app para una mejor experiencia</p>
+                    <p id="installBannerText">Instala la app para una mejor experiencia</p>
                 </div>
                 <button class="btn btn-primary btn-small" id="installBtn">Instalar</button>
                 <button class="close-btn" id="dismissInstallBtn" aria-label="Cerrar">
@@ -561,6 +561,57 @@
                         <path d="M18 6L6 18M6 6l12 12"/>
                     </svg>
                 </button>
+            </div>
+        </div>
+
+        <!-- iOS Install Instructions Modal -->
+        <div class="modal" id="iosInstallModal">
+            <div class="modal-overlay" id="iosInstallModalOverlay"></div>
+            <div class="modal-content modal-small">
+                <div class="modal-header">
+                    <h3>Cómo instalar en iPhone/iPad</h3>
+                    <button class="close-btn" id="closeIosInstallModal" aria-label="Cerrar">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="ios-instructions">
+                        <div class="ios-step">
+                            <div class="ios-step-number">1</div>
+                            <div class="ios-step-content">
+                                <p>Abre esta página en <strong>Safari</strong></p>
+                            </div>
+                        </div>
+                        <div class="ios-step">
+                            <div class="ios-step-number">2</div>
+                            <div class="ios-step-content">
+                                <p>Pulsa el botón <strong>Compartir</strong> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 8v8M8 12h8"/></svg></p>
+                            </div>
+                        </div>
+                        <div class="ios-step">
+                            <div class="ios-step-number">3</div>
+                            <div class="ios-step-content">
+                                <p>Desliza hacia abajo y pulsa <strong>Añadir a inicio</strong></p>
+                            </div>
+                        </div>
+                        <div class="ios-step">
+                            <div class="ios-step-number">4</div>
+                            <div class="ios-step-content">
+                                <p>Pulsa <strong>Añadir</strong> en la esquina superior derecha</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ios-install-preview">
+                        <svg width="180" height="40" viewBox="0 0 180 40" fill="none">
+                            <rect x="0" y="0" width="40" height="40" rx="8" fill="#6366f1"/>
+                            <path d="M12 12h4v4h-4z M14 10v10 M10 14h10" stroke="white" stroke-width="2" fill="none"/>
+                            <rect x="50" y="8" width="120" height="24" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+                            <text x="60" y="24" font-size="10" fill="#64748b">Añadir a inicio</text>
+                        </svg>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

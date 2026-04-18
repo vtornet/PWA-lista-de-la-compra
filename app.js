@@ -1623,32 +1623,101 @@ function toggleTheme() {
 
 let deferredPrompt;
 
-function handleInstallPrompt() {
-    if (localStorage.getItem(STORAGE_KEYS.installDismissed)) return;
+const pwaInstall = {
+    isInstalled: () => {
+        return window.matchMedia('(display-mode: standalone)').matches ||
+               window.navigator.standalone === true ||
+               document.referrer.includes('android-app://');
+    },
 
-    window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
+    isIOS: () => {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    },
+
+    isMobile: () => {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    },
+
+    canShowPrompt: () => {
+        if (pwaInstall.isInstalled()) return false;
+        if (localStorage.getItem(STORAGE_KEYS.installDismissed)) return false;
+        return true;
+    },
+
+    showIOSInstructions: () => {
+        const bannerText = document.getElementById('installBannerText');
+        const installBtn = document.getElementById('installBtn');
+
+        bannerText.textContent = 'Instala la app en tu iPhone/iPad';
+        installBtn.textContent = 'Ver instrucciones';
         document.getElementById('installBanner').style.display = '';
-    });
-}
+    },
+
+    hideBanner: () => {
+        document.getElementById('installBanner').style.display = 'none';
+    },
+
+    init: () => {
+        if (!pwaInstall.canShowPrompt()) return;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+
+            if (pwaInstall.isMobile()) {
+                document.getElementById('installBanner').style.display = '';
+            }
+        });
+
+        window.addEventListener('appinstalled', () => {
+            pwaInstall.hideBanner();
+            deferredPrompt = null;
+            localStorage.setItem(STORAGE_KEYS.installDismissed, 'true');
+        });
+
+        if (pwaInstall.isIOS() && pwaInstall.isMobile() && !pwaInstall.isInstalled()) {
+            setTimeout(() => {
+                if (pwaInstall.canShowPrompt()) {
+                    pwaInstall.showIOSInstructions();
+                }
+            }, 3000);
+        }
+    }
+};
 
 async function promptInstall() {
+    if (pwaInstall.isIOS()) {
+        openIosInstallModal();
+        return;
+    }
+
     if (!deferredPrompt) return;
 
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
 
     if (outcome === 'accepted') {
-        document.getElementById('installBanner').style.display = 'none';
+        pwaInstall.hideBanner();
     }
 
     deferredPrompt = null;
 }
 
 function dismissInstall() {
-    document.getElementById('installBanner').style.display = 'none';
+    pwaInstall.hideBanner();
     localStorage.setItem(STORAGE_KEYS.installDismissed, 'true');
+}
+
+function openIosInstallModal() {
+    document.getElementById('iosInstallModal').classList.add('active');
+}
+
+function closeIosInstallModal() {
+    document.getElementById('iosInstallModal').classList.remove('active');
+}
+
+function handleInstallPrompt() {
+    pwaInstall.init();
 }
 
 // ============================================
@@ -1979,6 +2048,10 @@ function setupEventListeners() {
     // Install banner
     document.getElementById('installBtn').addEventListener('click', promptInstall);
     document.getElementById('dismissInstallBtn').addEventListener('click', dismissInstall);
+
+    // iOS install modal
+    document.getElementById('iosInstallModalOverlay').addEventListener('click', closeIosInstallModal);
+    document.getElementById('closeIosInstallModal').addEventListener('click', closeIosInstallModal);
 
     // Handle resize for chart
     window.addEventListener('resize', utils.debounce(() => {

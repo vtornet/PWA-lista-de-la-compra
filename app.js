@@ -928,10 +928,11 @@ Object.assign(itemsSync, {
         if (!supabaseClient || !auth.isAuthenticated()) return;
 
         const list = appState.lists.find(l => l.id === item.listId);
+        console.log('[ItemsSync] syncItem called for:', item.name, 'list.isShared:', list?.isShared);
         if (!list?.isShared) return;
 
         try {
-            await supabaseClient
+            const { error } = await supabaseClient
                 .from('items')
                 .upsert({
                     id: item.id,
@@ -941,8 +942,16 @@ Object.assign(itemsSync, {
                     price: item.price,
                     image_url: item.imageUrl,
                     in_shopping_list: item.inShoppingList,
-                    created_at: item.createdAt || Date.now()
+                    created_at: new Date(item.createdAt || Date.now()).toISOString(),
+                    updated_at: new Date().toISOString(),
+                    created_by: currentUser.id
                 });
+
+            if (error) {
+                console.error('[ItemsSync] Error syncing item:', error);
+            } else {
+                console.log('[ItemsSync] Item synced successfully:', item.name);
+            }
         } catch (error) {
             console.error('[ItemsSync] Error syncing item:', error);
         }
@@ -2454,13 +2463,17 @@ async function loadSharedLists() {
             const sharedListIds = new Set(data.map(member => member.list_id));
 
             // Remove local shared lists that no longer exist in Supabase
+            // BUT only if they were received from others (not created by current user)
             const localLists = await db.getAll(STORES.lists);
             for (const localList of localLists) {
-                if (localList.isShared && !sharedListIds.has(localList.id)) {
+                // Check if this list has items created by current user (it's their own list)
+                const listItems = await db.getAll(STORES.items);
+                const hasOwnItems = listItems.some(i => i.listId === localList.id);
+
+                if (localList.isShared && !sharedListIds.has(localList.id) && !hasOwnItems) {
                     console.log('[Shared] Removing stale shared list:', localList.id);
                     await db.delete(STORES.lists, localList.id);
                     // Also remove items from this list
-                    const listItems = await db.getAll(STORES.items);
                     for (const item of listItems) {
                         if (item.listId === localList.id) {
                             await db.delete(STORES.items, item.id);

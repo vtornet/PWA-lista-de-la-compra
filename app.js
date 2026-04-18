@@ -2473,16 +2473,39 @@ async function loadPendingInvitations() {
     if (!auth.isAuthenticated()) return;
 
     try {
-        const { data, error } = await supabaseClient
+        // First get pending invitations
+        const { data: invitations, error } = await supabaseClient
             .from('list_members')
-            .select('*, profiles!inner(email)')
+            .select('*')
             .eq('user_id', currentUser.id)
             .eq('status', 'pending');
 
-        if (!error && data && data.length > 0) {
-            renderInvitations(data);
-        } else {
+        if (error || !invitations || invitations.length === 0) {
             document.getElementById('invitationsSection').style.display = 'none';
+            return;
+        }
+
+        // Then get inviter emails separately
+        const inviterIds = invitations.map(inv => inv.created_by || currentUser.id).filter(id => id);
+        if (inviterIds.length > 0) {
+            const { data: inviterProfiles } = await supabaseClient
+                .from('profiles')
+                .select('id, email')
+                .in('id', inviterIds);
+
+            // Map emails to invitations
+            const emailMap = {};
+            if (inviterProfiles) {
+                inviterProfiles.forEach(p => emailMap[p.id] = p.email);
+            }
+
+            // Add emails to invitations
+            const invitationsWithEmails = invitations.map(inv => ({
+                ...inv,
+                profiles: { email: emailMap[inv.created_by] || 'Usuario' }
+            }));
+
+            renderInvitations(invitationsWithEmails);
         }
     } catch (error) {
         console.error('[Shared] Error loading invitations:', error);

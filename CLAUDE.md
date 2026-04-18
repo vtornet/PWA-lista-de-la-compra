@@ -405,7 +405,49 @@ npx lighthouse http://localhost:8080 --view
 - **Solución**: Añadidas las llamadas a `loadSharedLists()`, `loadPendingInvitations()` y `subscribeToInvitations()` en `checkSession()`
 - **Fecha de resolución**: 18-04-2026
 
-### Listas compartidas vacías (PENDIENTE)
-- **Problema**: Al aceptar una invitación, la lista compartida aparece sin productos
-- **Causa**: Los productos no se sincronizan desde Supabase al aceptar la invitación
-- **Estado**: Se ha añadido `itemsSync.loadItems()` en `loadSharedLists()`, pero puede necesitar validación adicional
+### Error 406 al compartir lista (SOLUCIONADO)
+- **Problema**: Error 406 (Not Acceptable) al verificar si un usuario ya es miembro de una lista
+- **Causa**: Uso de `.single()` en consulta que puede devolver 0 o múltiples resultados
+- **Solución**: Eliminado `.single()` y verificado con `existingMember.length > 0`
+- **Fecha de resolución**: 18-04-2026
+
+### Listas compartidas vacías (SOLUCIONADO)
+- **Problema**: Al aceptar una invitación, la lista compartida aparecía sin productos
+- **Causa 1**: Los productos no se subían a Supabase al compartir la lista
+- **Causa 2**: Políticas RLS de Supabase impedían insertar items
+- **Causa 3**: Timestamp en formato incorrecto (milisegundos en lugar de ISO 8601)
+- **Solución**:
+  - Añadida subida de productos en `handleShareListSubmit()`
+  - Modificadas políticas RLS de tabla `items` para permitir INSERT/UPDATE/DELETE
+  - Convertido timestamp a formato ISO con `new Date().toISOString()`
+- **Fecha de resolución**: 18-04-2026
+
+### Sincronización en tiempo real de items (SOLUCIONADO)
+- **Problema**: Cuando un usuario marca un producto como comprado, no se actualiza en el otro usuario
+- **Causa**: No existía suscripción realtime para la tabla `items`
+- **Solución**: Añadida función `subscribeToItems()` que escucha cambios en items de listas compartidas y actualiza el estado local
+- **Fecha de resolución**: 18-04-2026
+
+---
+
+## CONFIGURACIÓN SUPABASE REQUERIDA
+
+Para que las listas compartidas funcionen correctamente, asegúrate de tener:
+
+### Tablas necesarias:
+- **profiles**: id (uuid), email (text), created_at (timestamp)
+- **list_members**: id (uuid), list_id (text), user_id (uuid), role (text), status (text), list_name (text), created_by (uuid), created_at (timestamp)
+- **items**: id (text), list_id (text), name (text), quantity (integer), price (numeric), image_url (text), in_shopping_list (boolean), created_at (timestamp), updated_at (timestamp), created_by (uuid)
+
+### Políticas RLS necesarias:
+```sql
+-- list_members
+CREATE POLICY "Users can view list memberships" ON public.list_members FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Users can create list membership" ON public.list_members FOR INSERT TO authenticated WITH CHECK (true);
+
+-- items
+CREATE POLICY "Users can view items" ON public.items FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Users can create items" ON public.items FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Users can update items" ON public.items FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Users can delete items" ON public.items FOR DELETE TO authenticated USING (true);
+```

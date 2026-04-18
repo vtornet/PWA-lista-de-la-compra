@@ -2594,14 +2594,14 @@ function subscribeToItems() {
     }
 
     // Get all shared list IDs
-    const sharedListIds = appState.lists.filter(l => l.isShared).map(l => l.id);
+    const sharedListIds = new Set(appState.lists.filter(l => l.isShared).map(l => l.id));
 
-    if (sharedListIds.length === 0) {
+    if (sharedListIds.size === 0) {
         console.log('[Realtime] No shared lists to subscribe to');
         return;
     }
 
-    console.log('[Realtime] Subscribing to items for lists:', sharedListIds);
+    console.log('[Realtime] Subscribing to items for lists:', Array.from(sharedListIds));
 
     itemsSubscription = supabaseClient
         .channel('items-changes')
@@ -2610,11 +2610,22 @@ function subscribeToItems() {
             {
                 event: '*',
                 schema: 'public',
-                table: 'items',
-                filter: `list_id=in.(${sharedListIds.join(',')})`
+                table: 'items'
             },
             async (payload) => {
-                console.log('[Realtime] Item change:', payload);
+                const itemId = payload.new?.id || payload.old?.id;
+                const listId = payload.new?.list_id || payload.old?.list_id;
+
+                console.log('[Realtime] Item change received:', payload);
+
+                // Only process if this item belongs to a shared list
+                if (!sharedListIds.has(listId)) {
+                    console.log('[Realtime] Ignoring item, not from shared list:', listId);
+                    return;
+                }
+
+                console.log('[Realtime] Processing item change for shared list:', listId);
+
                 if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
                     const newItem = payload.new;
                     // Update local item

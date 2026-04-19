@@ -1500,6 +1500,7 @@ const ui = {
             container.innerHTML = appState.lists.map(list => {
                 const itemCount = listCounts[list.id] || 0;
                 const isShared = list.isShared || false;
+                const isAuthenticated = auth.isAuthenticated();
                 const sharedBadge = isShared ? `
                     <span class="list-shared-badge">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1511,6 +1512,11 @@ const ui = {
                         </svg>
                         Compartida
                     </span>
+                ` : '';
+
+                // Cloud icon for synced lists (all lists when authenticated)
+                const syncBadge = isAuthenticated ? `
+                    <span class="list-sync-badge" title="Sincronizado con Supabase">☁️</span>
                 ` : '';
 
                 return `
@@ -1549,6 +1555,7 @@ const ui = {
                         <div class="list-card-name">${utils.escapeHtml(list.name)}</div>
                         <div class="list-card-meta">
                             ${sharedBadge}
+                            ${syncBadge}
                             <span class="list-card-count">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>

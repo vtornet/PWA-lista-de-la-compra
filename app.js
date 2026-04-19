@@ -549,7 +549,11 @@ const dataOps = {
                             if (sbUpdatedAt > localList.updatedAt) {
                                 localList.name = sbList.name;
                                 localList.updatedAt = sbUpdatedAt;
-                                localList.isShared = sbList.is_shared || false;
+                                // Don't overwrite isShared if already set locally
+                                // It will be set correctly by loadSharedLists()
+                                if (!localList.isShared) {
+                                    localList.isShared = sbList.is_shared || false;
+                                }
                                 await db.put(STORES.lists, localList);
                             }
                         }

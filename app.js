@@ -3352,6 +3352,13 @@ function setupEventListeners() {
         document.getElementById('importFileInput').click();
     });
 
+    document.getElementById('clearSyncCacheBtn').addEventListener('click', () => {
+        confirmAction('¿Limpiar caché de sincronización? Esto puede hacer que listas antiguas vuelvan a sincronizarse.', async () => {
+            localStorage.removeItem('syncedLists');
+            ui.showToast('Caché limpiado', 'success');
+        });
+    });
+
     document.getElementById('importFileInput').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;

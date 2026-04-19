@@ -438,6 +438,13 @@ const auth = {
     },
 
     async signOut() {
+        // Confirm before signing out
+        const confirmed = await new Promise(resolve => {
+            confirmAction('¿Cerrar sesión? Las listas seguirán disponibles en este dispositivo.', resolve);
+        });
+
+        if (!confirmed) return;
+
         try {
             unsubscribeFromInvitations();
             itemsSync.unsubscribe();

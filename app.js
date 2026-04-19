@@ -744,11 +744,10 @@ const dataOps = {
                     .eq('user_id', currentUser.id);
                 console.log('[DataOps] list_members delete result:', membersResult);
 
-                // Delete from Supabase if user is owner
+                // Delete from Supabase (RLS policy will check ownership)
                 const listsResult = await supabaseClient.from('lists')
                     .delete()
-                    .eq('id', id)
-                    .eq('owner_id', currentUser.id);
+                    .eq('id', id);
                 console.log('[DataOps] lists delete result:', listsResult);
 
                 if (listsResult.error) {

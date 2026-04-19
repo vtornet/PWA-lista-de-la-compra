@@ -2026,6 +2026,25 @@ const ui = {
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 250);
         }, 3000);
+    },
+
+    showSpinner(message = 'Sincronizando...', showOverlay = true) {
+        const spinner = document.getElementById('syncSpinner');
+        const spinnerContent = spinner.querySelector('.sync-spinner-content span');
+        if (spinnerContent) spinnerContent.textContent = message;
+        if (!showOverlay) {
+            spinner.style.backgroundColor = 'transparent';
+        } else {
+            spinner.style.backgroundColor = '';
+        }
+        spinner.style.display = 'flex';
+        requestAnimationFrame(() => spinner.classList.add('show'));
+    },
+
+    hideSpinner() {
+        const spinner = document.getElementById('syncSpinner');
+        spinner.classList.remove('show');
+        setTimeout(() => spinner.style.display = 'none', 250);
     }
 };
 

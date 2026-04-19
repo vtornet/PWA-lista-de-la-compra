@@ -2864,15 +2864,23 @@ function subscribeToLists() {
             async (payload) => {
                 console.log('[Realtime] List change received:', payload);
                 const listId = payload.new?.id || payload.old?.id;
-                const ownerId = payload.new?.owner_id || payload.old?.owner_id;
 
-                // Only process if this list belongs to current user
-                if (ownerId !== currentUser.id) {
-                    console.log('[Realtime] Ignoring list, not owned by current user:', listId, 'owner:', ownerId);
-                    return;
+                // For DELETE events, process if we have this list locally (regardless of owner_id)
+                // For INSERT/UPDATE, verify ownership
+                if (payload.eventType !== 'DELETE') {
+                    const ownerId = payload.new?.owner_id || payload.old?.owner_id;
+                    if (ownerId !== currentUser.id) {
+                        console.log('[Realtime] Ignoring list, not owned by current user:', listId, 'owner:', ownerId);
+                        return;
+                    }
                 }
 
                 if (payload.eventType === 'DELETE') {
+                    // Only process if we have this list locally
+                    if (!appState.lists.find(l => l.id === listId)) {
+                        console.log('[Realtime] Ignoring delete, list not local:', listId);
+                        return;
+                    }
                     // Remove from local state and IndexedDB
                     appState.lists = appState.lists.filter(l => l.id !== listId);
                     await db.delete(STORES.lists, listId);

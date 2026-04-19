@@ -132,6 +132,23 @@ const utils = {
         a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
+    },
+
+    isNetworkError(error) {
+        if (!error) return false;
+        const errorMsg = error?.message?.toLowerCase() || error.toString().toLowerCase();
+        return errorMsg.includes('network') ||
+               errorMsg.includes('fetch') ||
+               errorMsg.includes('connection') ||
+               errorMsg.includes('offline') ||
+               errorMsg.includes('failed to fetch');
+    },
+
+    getSyncErrorMessage(error) {
+        if (this.isNetworkError(error)) {
+            return 'Error de conexión. Los cambios se guardan localmente.';
+        }
+        return error?.message || 'Error al sincronizar';
     }
 };
 
@@ -728,7 +745,11 @@ const dataOps = {
                 syncedLists.add(list.id);
                 localStorage.setItem('syncedLists', JSON.stringify([...syncedLists]));
             } catch (error) {
+                const errorMsg = utils.getSyncErrorMessage(error);
                 console.error('[DataOps] Error syncing list to Supabase:', error);
+                if (utils.isNetworkError(error)) {
+                    ui.showToast(errorMsg, 'warning');
+                }
             }
         }
 
@@ -1216,11 +1237,18 @@ Object.assign(itemsSync, {
 
             if (error) {
                 console.error('[ItemsSync] Error syncing item:', error);
+                // Only show toast for network errors, not for every sync failure
+                if (utils.isNetworkError(error)) {
+                    ui.showToast(utils.getSyncErrorMessage(error), 'warning');
+                }
             } else {
                 console.log('[ItemsSync] Item synced successfully:', item.name);
             }
         } catch (error) {
             console.error('[ItemsSync] Error syncing item:', error);
+            if (utils.isNetworkError(error)) {
+                ui.showToast(utils.getSyncErrorMessage(error), 'warning');
+            }
         }
     },
 

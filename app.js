@@ -601,6 +601,9 @@ const dataOps = {
         if (!auth.isAuthenticated() || !supabaseClient) return;
 
         try {
+            // Get the set of lists that were previously synced
+            const previouslySynced = new Set(JSON.parse(localStorage.getItem('syncedLists') || '[]'));
+
             // Get all local lists
             const localLists = await db.getAll(STORES.lists);
 
@@ -617,14 +620,22 @@ const dataOps = {
             const supabaseListIds = new Set(supabaseLists?.map(l => l.id) || []);
 
             // Find lists that are only local (not in Supabase)
-            const listsToSync = localLists.filter(l => !supabaseListIds.has(l.id));
+            // BUT skip lists that were previously synced (they were intentionally deleted from Supabase)
+            const listsToSync = localLists.filter(l =>
+                !supabaseListIds.has(l.id) && !previouslySynced.has(l.id)
+            );
 
             if (listsToSync.length === 0) {
                 console.log('[DataOps] All lists already synced');
+                // Update syncedLists with current Supabase lists
+                const allSyncedIds = [...supabaseListIds, ...previouslySynced];
+                localStorage.setItem('syncedLists', JSON.stringify([...new Set(allSyncedIds)]));
                 return;
             }
 
             console.log('[DataOps] Syncing', listsToSync.length, 'local lists to Supabase');
+
+            const syncedIds = [];
 
             for (const list of listsToSync) {
                 // Upload list to Supabase (use upsert to avoid conflicts)
@@ -636,6 +647,8 @@ const dataOps = {
                     updated_at: new Date(list.updatedAt).toISOString(),
                     is_shared: false
                 }, { onConflict: 'id' });
+
+                syncedIds.push(list.id);
 
                 // Get and upload items for this list
                 const localItems = await db.getAll(STORES.items);
@@ -661,6 +674,10 @@ const dataOps = {
             }
 
             console.log('[DataOps] Sync completed:', listsToSync.length, 'lists synced');
+
+            // Update syncedLists with all Supabase lists plus newly synced lists
+            const allSyncedIds = [...supabaseListIds, ...previouslySynced, ...syncedIds];
+            localStorage.setItem('syncedLists', JSON.stringify([...new Set(allSyncedIds)]));
 
         } catch (error) {
             console.error('[DataOps] Error syncing local lists:', error);
@@ -692,6 +709,11 @@ const dataOps = {
                     is_shared: false
                 });
                 console.log('[DataOps] List synced to Supabase:', list.name);
+
+                // Add to synced lists registry
+                const syncedLists = new Set(JSON.parse(localStorage.getItem('syncedLists') || '[]'));
+                syncedLists.add(list.id);
+                localStorage.setItem('syncedLists', JSON.stringify([...syncedLists]));
             } catch (error) {
                 console.error('[DataOps] Error syncing list to Supabase:', error);
             }
@@ -2855,6 +2877,10 @@ function subscribeToLists() {
                     appState.lists = appState.lists.filter(l => l.id !== listId);
                     await db.delete(STORES.lists, listId);
                     await db.deleteByIndex(STORES.items, 'listId', listId);
+                    // Remove from synced lists registry
+                    const syncedLists = new Set(JSON.parse(localStorage.getItem('syncedLists') || '[]'));
+                    syncedLists.delete(listId);
+                    localStorage.setItem('syncedLists', JSON.stringify([...syncedLists]));
                     console.log('[Realtime] List deleted locally:', listId);
                     ui.renderListsGrid();
                 } else if (payload.eventType === 'INSERT') {

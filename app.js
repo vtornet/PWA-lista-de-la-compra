@@ -2838,12 +2838,18 @@ function subscribeToLists() {
             {
                 event: '*',
                 schema: 'public',
-                table: 'lists',
-                filter: `owner_id=eq.${currentUser.id}`
+                table: 'lists'
             },
             async (payload) => {
                 console.log('[Realtime] List change received:', payload);
                 const listId = payload.new?.id || payload.old?.id;
+                const ownerId = payload.new?.owner_id || payload.old?.owner_id;
+
+                // Only process if this list belongs to current user
+                if (ownerId !== currentUser.id) {
+                    console.log('[Realtime] Ignoring list, not owned by current user:', listId, 'owner:', ownerId);
+                    return;
+                }
 
                 if (payload.eventType === 'DELETE') {
                     // Remove from local state and IndexedDB

@@ -503,6 +503,7 @@ const auth = {
     updateAuthUI() {
         const authSection = document.getElementById('authSection');
         const userEmailSpan = document.getElementById('userEmail');
+        const realtimeIndicator = document.getElementById('realtimeIndicator');
 
         if (!authSection) return;
 
@@ -511,8 +512,16 @@ const auth = {
             if (userEmailSpan) {
                 userEmailSpan.textContent = currentUser.email;
             }
+            // Show realtime indicator when authenticated
+            if (realtimeIndicator) {
+                realtimeIndicator.hidden = false;
+            }
         } else {
             authSection.classList.remove('logged-in');
+            // Hide realtime indicator when not authenticated
+            if (realtimeIndicator) {
+                realtimeIndicator.hidden = true;
+            }
         }
     },
 
@@ -608,6 +617,10 @@ const dataOps = {
 
             // Load shared lists from list_members
             await loadSharedLists();
+
+            // Subscribe to realtime items changes for shared lists
+            // This must be called after loadSharedLists() to ensure shared lists are marked
+            subscribeToItems();
         }
 
         appState.lists.sort((a, b) => a.name.localeCompare(b.name));
@@ -1226,30 +1239,80 @@ Object.assign(itemsSync, {
         const list = appState.lists.find(l => l.id === item.listId);
         console.log('[ItemsSync] syncItem called for:', item.name, 'list.isShared:', list?.isShared);
 
-        try {
-            const { error } = await supabaseClient
-                .from('items')
-                .upsert({
-                    id: item.id,
-                    name: item.name,
-                    list_id: item.listId,
-                    quantity: item.quantity,
-                    price: item.price,
-                    image_url: item.imageUrl,
-                    in_shopping_list: item.inShoppingList,
-                    created_at: new Date(item.createdAt || Date.now()).toISOString(),
-                    updated_at: new Date().toISOString(),
-                    created_by: currentUser.id
-                });
+        // Only sync items from shared lists or authenticated user's own lists
+        if (!auth.isAuthenticated()) {
+            console.log('[ItemsSync] Skipping sync, user not authenticated');
+            return;
+        }
 
-            if (error) {
-                console.error('[ItemsSync] Error syncing item:', error);
-                // Only show toast for network errors, not for every sync failure
-                if (utils.isNetworkError(error)) {
-                    ui.showToast(utils.getSyncErrorMessage(error), 'warning');
+        // For shared lists, sync to allow guest modifications
+        // For own lists, only sync if we want cloud backup (could check a preference)
+        // Currently syncing all items when authenticated
+        if (!list) {
+            console.log('[ItemsSync] Skipping sync, list not found');
+            return;
+        }
+
+        try {
+            // Check if item exists in Supabase
+            const { data: existingItem, error: checkError } = await supabaseClient
+                .from('items')
+                .select('id')
+                .eq('id', item.id)
+                .maybeSingle();
+
+            if (checkError) {
+                console.error('[ItemsSync] Error checking item existence:', checkError);
+                return;
+            }
+
+            if (existingItem) {
+                // Item exists, update only the fields that should change
+                // Don't modify created_by or created_at to preserve original creator info
+                const { error } = await supabaseClient
+                    .from('items')
+                    .update({
+                        in_shopping_list: item.inShoppingList,
+                        quantity: item.quantity,
+                        price: item.price,
+                        image_url: item.imageUrl,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', item.id);
+
+                if (error) {
+                    console.error('[ItemsSync] Error updating item:', error);
+                    if (utils.isNetworkError(error)) {
+                        ui.showToast(utils.getSyncErrorMessage(error), 'warning');
+                    }
+                } else {
+                    console.log('[ItemsSync] Item updated successfully:', item.name);
                 }
             } else {
-                console.log('[ItemsSync] Item synced successfully:', item.name);
+                // Item doesn't exist, insert new item
+                const { error } = await supabaseClient
+                    .from('items')
+                    .insert({
+                        id: item.id,
+                        name: item.name,
+                        list_id: item.listId,
+                        quantity: item.quantity,
+                        price: item.price,
+                        image_url: item.imageUrl,
+                        in_shopping_list: item.inShoppingList,
+                        created_at: new Date(item.createdAt || Date.now()).toISOString(),
+                        updated_at: new Date().toISOString(),
+                        created_by: currentUser.id
+                    });
+
+                if (error) {
+                    console.error('[ItemsSync] Error inserting item:', error);
+                    if (utils.isNetworkError(error)) {
+                        ui.showToast(utils.getSyncErrorMessage(error), 'warning');
+                    }
+                } else {
+                    console.log('[ItemsSync] Item inserted successfully:', item.name);
+                }
             }
         } catch (error) {
             console.error('[ItemsSync] Error syncing item:', error);
@@ -2080,6 +2143,22 @@ const ui = {
         const spinner = document.getElementById('syncSpinner');
         spinner.classList.remove('show');
         setTimeout(() => spinner.style.display = 'none', 250);
+    },
+
+    showRealtimeActivity() {
+        const indicator = document.getElementById('realtimeIndicator');
+        if (!indicator) return;
+
+        // Show the indicator
+        indicator.hidden = false;
+
+        // Add active class for burst animation
+        indicator.classList.add('active');
+
+        // Remove active class after animation completes (3 pulses)
+        setTimeout(() => {
+            indicator.classList.remove('active');
+        }, 1800); // 3 * 0.6s = 1.8s
     }
 };
 
@@ -2759,6 +2838,9 @@ async function handleShareListSubmit(e) {
             await db.put(STORES.lists, currentList);
         }
 
+        // Subscribe to realtime items changes for the newly shared list
+        subscribeToItems();
+
         ui.showToast(`Invitación enviada a ${email}`, 'success');
         closeShareListModal();
         loadListMembers(currentShareListId);
@@ -2870,9 +2952,6 @@ async function loadSharedLists() {
             // Update UI to show shared ones
             appState.lists.sort((a, b) => a.name.localeCompare(b.name));
             ui.renderListsGrid();
-
-            // Subscribe to realtime items changes
-            subscribeToItems();
         }
     } catch (error) {
         console.error('[Shared] Error loading shared lists:', error);
@@ -2898,6 +2977,7 @@ function subscribeToInvitations() {
             },
             (payload) => {
                 console.log('[Realtime] Invitation change:', payload);
+                ui.showRealtimeActivity();
                 if (payload.eventType === 'INSERT') {
                     loadPendingInvitations();
                 } else if (payload.eventType === 'UPDATE') {
@@ -2937,6 +3017,7 @@ function subscribeToLists() {
             },
             async (payload) => {
                 console.log('[Realtime] List change received:', payload);
+                ui.showRealtimeActivity();
                 const listId = payload.new?.id || payload.old?.id;
 
                 // For DELETE events, process if we have this list locally (regardless of owner_id)
@@ -3025,6 +3106,9 @@ function subscribeToItems() {
             async (payload) => {
                 const itemId = payload.new?.id || payload.old?.id;
                 const listId = payload.new?.list_id || payload.old?.list_id;
+
+                console.log('[Realtime] Item change received:', payload);
+                ui.showRealtimeActivity();
 
                 console.log('[Realtime] Item change received:', payload);
 
@@ -3155,6 +3239,8 @@ async function respondToInvitation(memberId, response) {
         await loadPendingInvitations();
         if (response === 'accepted') {
             await loadSharedLists();
+            // Subscribe to realtime items changes for the newly accepted shared list
+            subscribeToItems();
         }
     } catch (error) {
         console.error('[Shared] Error responding to invitation:', error);

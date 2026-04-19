@@ -182,6 +182,41 @@ img, picture {
 .header-actions {
     display: flex;
     gap: var(--spacing-xs);
+    align-items: center;
+}
+
+/* Realtime activity indicator */
+.realtime-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    position: relative;
+}
+
+.realtime-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--primary);
+    box-shadow: 0 0 8px var(--primary);
+    animation: realtimePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes realtimePulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(0.8);
+    }
+}
+
+.realtime-indicator.active .realtime-dot {
+    animation: realtimePulse 0.6s ease-in-out 3;
 }
 
 .icon-btn {

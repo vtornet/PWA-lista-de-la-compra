@@ -488,3 +488,21 @@ CREATE POLICY "Users can create items" ON public.items FOR INSERT TO authenticat
 CREATE POLICY "Users can update items" ON public.items FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Users can delete items" ON public.items FOR DELETE TO authenticated USING (true);
 ```
+
+---
+
+## TAREAS PENDIENTES
+
+### Mejoras de UX y Sincronización
+
+- [~~] **1. Indicadores de sincronización**: Mostrar iconos (☁️) que indiquen qué listas están sincronizadas con Supabase
+- [~~] **2. Estado de carga**: Mostrar spinners cuando se sincroniza con Supabase
+- [~~] **3. Manejo de errores offline**: Mensajes más claros cuando falla la sincronización por falta de conexión
+- [~~] **4. Sincronización de borrado de items**: Cuando se borra un item, sincronizar el borrado con Supabase
+- [~~] **5. Confirmación al salir**: Advertir si hay cambios sin sincronizar al cerrar sesión
+- [~~] **6. Indicador de actividad realtime**: Pequeño punto o animación cuando se reciben cambios en tiempo real
+
+**Fecha de creación**: 19-04-2026
+**Última actualización**: 19-04-2026
+
+**Estado**: ✅ Todas las tareas completadas

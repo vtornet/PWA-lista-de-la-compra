@@ -3605,6 +3605,7 @@ function setupEventListeners() {
     // Auth modal
     document.getElementById('loginBtn').addEventListener('click', () => openAuthModal('login'));
     document.getElementById('logoutBtn').addEventListener('click', () => auth.signOut());
+    document.getElementById('clearCacheBtn').addEventListener('click', clearAppCache);
     document.getElementById('authModalOverlay').addEventListener('click', closeAuthModal);
     document.getElementById('closeAuthModal').addEventListener('click', closeAuthModal);
     document.getElementById('authForm').addEventListener('submit', handleAuthSubmit);
@@ -3623,6 +3624,64 @@ function setupEventListeners() {
         }
     }, 250));
 }
+
+// ============================================
+// CACHE MANAGEMENT
+// ============================================
+
+async function clearAppCache() {
+    const confirmed = await new Promise(resolve => {
+        confirmAction(
+            '¿Limpiar caché? Esto cerrará tu sesión y recargará la app.',
+            resolve
+        );
+    });
+
+    if (!confirmed) return;
+
+    try {
+        ui.showSpinner('Limpiando caché...');
+
+        // 1. Clear all Service Worker caches
+        if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(
+                cacheNames.map(cacheName => caches.delete(cacheName))
+            );
+            console.log('[Cache] Cleared', cacheNames.length, 'caches');
+        }
+
+        // 2. Unregister Service Worker to force fresh install
+        if ('serviceWorker' in navigator) {
+            const registration = await navigator.serviceWorker.getRegistration();
+            if (registration) {
+                await registration.unregister();
+                console.log('[Cache] Service Worker unregistered');
+            }
+        }
+
+        // 3. Clear localStorage (except theme preference)
+        const theme = localStorage.getItem('theme');
+        localStorage.clear();
+        if (theme) localStorage.setItem('theme', theme);
+
+        ui.hideSpinner();
+        ui.showToast('Caché limpiada. Recargando...', 'success');
+
+        // 4. Reload after a short delay
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
+
+    } catch (error) {
+        console.error('[Cache] Error clearing cache:', error);
+        ui.hideSpinner();
+        ui.showToast('Error al limpiar caché', 'error');
+    }
+}
+
+// Make it global for onclick
+window.clearAppCache = clearAppCache;
 
 // ============================================
 // SERVICE WORKER REGISTRATION

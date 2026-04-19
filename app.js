@@ -621,22 +621,23 @@ const dataOps = {
             console.log('[DataOps] Syncing', listsToSync.length, 'local lists to Supabase');
 
             for (const list of listsToSync) {
-                // Upload list to Supabase
-                await supabaseClient.from('lists').insert({
+                // Upload list to Supabase (use upsert to avoid conflicts)
+                await supabaseClient.from('lists').upsert({
                     id: list.id,
                     name: list.name,
                     owner_id: currentUser.id,
                     created_at: new Date(list.createdAt).toISOString(),
                     updated_at: new Date(list.updatedAt).toISOString(),
                     is_shared: false
-                });
+                }, { onConflict: 'id' });
 
                 // Get and upload items for this list
                 const localItems = await db.getAll(STORES.items);
                 const listItems = localItems.filter(i => i.listId === list.id);
 
                 for (const item of listItems) {
-                    await supabaseClient.from('items').insert({
+                    // Use upsert to avoid conflicts
+                    await supabaseClient.from('items').upsert({
                         id: item.id,
                         name: item.name,
                         list_id: item.listId,
@@ -647,16 +648,13 @@ const dataOps = {
                         created_at: new Date(item.createdAt || Date.now()).toISOString(),
                         updated_at: new Date().toISOString(),
                         created_by: currentUser.id
-                    });
+                    }, { onConflict: 'id' });
                 }
 
                 console.log('[DataOps] Synced list:', list.name, 'with', listItems.length, 'items');
             }
 
             console.log('[DataOps] Sync completed:', listsToSync.length, 'lists synced');
-
-            // Reload lists to get the updated state
-            await this.loadLists();
 
         } catch (error) {
             console.error('[DataOps] Error syncing local lists:', error);

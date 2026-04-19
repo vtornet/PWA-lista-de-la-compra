@@ -286,6 +286,10 @@ const auth = {
                         loadSharedLists();
                         loadPendingInvitations();
                         subscribeToInvitations();
+                        // Sync local lists to Supabase (for lists created while logged out)
+                        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                            dataOps.syncLocalListsToSupabase();
+                        }
                     } else {
                         currentUser = null;
                         unsubscribeFromInvitations();
@@ -349,6 +353,8 @@ const auth = {
                 await loadSharedLists();
                 await loadPendingInvitations();
                 subscribeToInvitations();
+                // Sync local lists to Supabase (for lists created while logged out)
+                await dataOps.syncLocalListsToSupabase();
             }
         } catch (error) {
             console.error('[Auth] Session check failed:', error);
@@ -583,6 +589,78 @@ const dataOps = {
         appState.settings[key] = value;
         await db.put(STORES.settings, { key, value });
         localStorage.setItem(`setting_${key}`, JSON.stringify(value));
+    },
+
+    async syncLocalListsToSupabase() {
+        if (!auth.isAuthenticated() || !supabaseClient) return;
+
+        try {
+            // Get all local lists
+            const localLists = await db.getAll(STORES.lists);
+
+            // Get all Supabase lists
+            const { data: supabaseLists, error } = await supabaseClient
+                .from('lists')
+                .select('id');
+
+            if (error) {
+                console.error('[DataOps] Error getting Supabase lists:', error);
+                return;
+            }
+
+            const supabaseListIds = new Set(supabaseLists?.map(l => l.id) || []);
+
+            // Find lists that are only local (not in Supabase)
+            const listsToSync = localLists.filter(l => !supabaseListIds.has(l.id));
+
+            if (listsToSync.length === 0) {
+                console.log('[DataOps] All lists already synced');
+                return;
+            }
+
+            console.log('[DataOps] Syncing', listsToSync.length, 'local lists to Supabase');
+
+            for (const list of listsToSync) {
+                // Upload list to Supabase
+                await supabaseClient.from('lists').insert({
+                    id: list.id,
+                    name: list.name,
+                    owner_id: currentUser.id,
+                    created_at: new Date(list.createdAt).toISOString(),
+                    updated_at: new Date(list.updatedAt).toISOString(),
+                    is_shared: false
+                });
+
+                // Get and upload items for this list
+                const localItems = await db.getAll(STORES.items);
+                const listItems = localItems.filter(i => i.listId === list.id);
+
+                for (const item of listItems) {
+                    await supabaseClient.from('items').insert({
+                        id: item.id,
+                        name: item.name,
+                        list_id: item.listId,
+                        quantity: item.quantity,
+                        price: item.price,
+                        image_url: item.imageUrl,
+                        in_shopping_list: item.inShoppingList,
+                        created_at: new Date(item.createdAt || Date.now()).toISOString(),
+                        updated_at: new Date().toISOString(),
+                        created_by: currentUser.id
+                    });
+                }
+
+                console.log('[DataOps] Synced list:', list.name, 'with', listItems.length, 'items');
+            }
+
+            console.log('[DataOps] Sync completed:', listsToSync.length, 'lists synced');
+
+            // Reload lists to get the updated state
+            await this.loadLists();
+
+        } catch (error) {
+            console.error('[DataOps] Error syncing local lists:', error);
+        }
     },
 
     async createList(name) {
@@ -2916,10 +2994,11 @@ function handleInstallPrompt() {
 
 async function init() {
     try {
-        // Initialize Supabase Auth first and wait for session
-        await auth.init();
-
+        // Open IndexedDB FIRST - needed for operations that use it
         await db.open();
+
+        // Initialize Supabase Auth and wait for session
+        await auth.init();
 
         await dataOps.loadLists();
         await dataOps.loadSettings();

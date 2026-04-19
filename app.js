@@ -517,6 +517,14 @@ const dataOps = {
     async loadLists() {
         appState.lists = await db.getAll(STORES.lists);
 
+        // Ensure all lists have isShared defined
+        for (const list of appState.lists) {
+            if (list.isShared === undefined) {
+                list.isShared = false;
+                await db.put(STORES.lists, list);
+            }
+        }
+
         // If authenticated, sync lists with Supabase
         if (auth.isAuthenticated() && supabaseClient) {
             try {
@@ -693,7 +701,8 @@ const dataOps = {
             id: utils.generateId(),
             name,
             createdAt: Date.now(),
-            updatedAt: Date.now()
+            updatedAt: Date.now(),
+            isShared: false
         };
 
         // Save locally first
@@ -2934,7 +2943,7 @@ function subscribeToItems() {
     }
 
     // Get all shared list IDs
-    const sharedListIds = new Set(appState.lists.filter(l => l.isShared).map(l => l.id));
+    const sharedListIds = new Set(appState.lists.filter(l => l.isShared === true).map(l => l.id));
 
     if (sharedListIds.size === 0) {
         console.log('[Realtime] No shared lists to subscribe to');

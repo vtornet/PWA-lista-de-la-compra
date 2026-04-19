@@ -724,6 +724,7 @@ const dataOps = {
 
     async deleteList(id) {
         const list = appState.lists.find(l => l.id === id);
+        console.log('[DataOps] deleteList called for:', id, 'list:', list);
 
         // If this is a shared list (invitee), add to blacklist so it doesn't reappear
         if (list && list.isShared && list.sharedRole !== 'owner') {
@@ -734,17 +735,27 @@ const dataOps = {
         // Check if this is a shared list where user is not owner
         if (auth.isAuthenticated() && supabaseClient) {
             try {
+                console.log('[DataOps] Deleting from Supabase, listId:', id, 'owner_id:', currentUser.id);
+
                 // Remove from list_members if user is a member
-                await supabaseClient.from('list_members')
+                const membersResult = await supabaseClient.from('list_members')
                     .delete()
                     .eq('list_id', id)
                     .eq('user_id', currentUser.id);
+                console.log('[DataOps] list_members delete result:', membersResult);
 
                 // Delete from Supabase if user is owner
-                await supabaseClient.from('lists')
+                const listsResult = await supabaseClient.from('lists')
                     .delete()
                     .eq('id', id)
                     .eq('owner_id', currentUser.id);
+                console.log('[DataOps] lists delete result:', listsResult);
+
+                if (listsResult.error) {
+                    console.error('[DataOps] Error deleting list from Supabase:', listsResult.error);
+                } else {
+                    console.log('[DataOps] List deleted from Supabase successfully, affected rows:', listsResult.data?.length || listsResult.count);
+                }
             } catch (error) {
                 console.error('[DataOps] Error deleting list from Supabase:', error);
             }

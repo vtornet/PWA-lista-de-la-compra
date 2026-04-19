@@ -286,6 +286,7 @@ const auth = {
                         loadSharedLists();
                         loadPendingInvitations();
                         subscribeToInvitations();
+                        subscribeToLists();
                         // Sync local lists to Supabase (for lists created while logged out)
                         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
                             dataOps.syncLocalListsToSupabase();
@@ -293,6 +294,7 @@ const auth = {
                     } else {
                         currentUser = null;
                         unsubscribeFromInvitations();
+                        unsubscribeFromLists();
                         itemsSync.unsubscribe();
                         this.updateAuthUI();
                         // Reload to clear shared lists
@@ -353,6 +355,7 @@ const auth = {
                 await loadSharedLists();
                 await loadPendingInvitations();
                 subscribeToInvitations();
+                subscribeToLists();
                 // Sync local lists to Supabase (for lists created while logged out)
                 await dataOps.syncLocalListsToSupabase();
             }
@@ -382,6 +385,7 @@ const auth = {
                 this.updateAuthUI();
                 // New user won't have shared lists yet, but set up subscription
                 subscribeToInvitations();
+                subscribeToLists();
                 return { success: true };
             }
         } catch (error) {
@@ -407,6 +411,7 @@ const auth = {
                 await loadSharedLists();
                 await loadPendingInvitations();
                 subscribeToInvitations();
+                subscribeToLists();
                 return { success: true };
             }
         } catch (error) {
@@ -419,6 +424,7 @@ const auth = {
         try {
             unsubscribeFromInvitations();
             itemsSync.unsubscribe();
+            unsubscribeFromLists();
             await supabaseClient.auth.signOut();
             currentUser = null;
             this.updateAuthUI();
@@ -2804,6 +2810,59 @@ function unsubscribeFromInvitations() {
     if (invitationsSubscription) {
         supabaseClient.removeChannel(invitationsSubscription);
         invitationsSubscription = null;
+    }
+}
+
+// Subscribe to realtime changes for lists (owned by current user)
+let listsSubscription = null;
+
+function subscribeToLists() {
+    console.log('[Realtime] subscribeToLists called', { authenticated: auth.isAuthenticated(), hasSubscription: !!listsSubscription });
+    if (!auth.isAuthenticated() || listsSubscription) return;
+
+    listsSubscription = supabaseClient
+        .channel('lists-changes')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'lists',
+                filter: `owner_id=eq.${currentUser.id}`
+            },
+            async (payload) => {
+                console.log('[Realtime] List change received:', payload);
+                const listId = payload.new?.id || payload.old?.id;
+
+                if (payload.eventType === 'DELETE') {
+                    // Remove from local state and IndexedDB
+                    appState.lists = appState.lists.filter(l => l.id !== listId);
+                    await db.delete(STORES.lists, listId);
+                    await db.deleteByIndex(STORES.items, 'listId', listId);
+                    console.log('[Realtime] List deleted locally:', listId);
+                    ui.renderListsGrid();
+                } else if (payload.eventType === 'INSERT') {
+                    // New list added, reload lists
+                    await dataOps.loadLists();
+                    ui.renderListsGrid();
+                    console.log('[Realtime] New list added:', listId);
+                } else if (payload.eventType === 'UPDATE') {
+                    // List updated, reload
+                    await dataOps.loadLists();
+                    ui.renderListsGrid();
+                    console.log('[Realtime] List updated:', listId);
+                }
+            }
+        )
+        .subscribe((status) => {
+            console.log('[Realtime] Lists subscription status:', status);
+        });
+}
+
+function unsubscribeFromLists() {
+    if (listsSubscription) {
+        supabaseClient.removeChannel(listsSubscription);
+        listsSubscription = null;
     }
 }
 

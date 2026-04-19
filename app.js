@@ -868,7 +868,7 @@ const dataOps = {
         await db.delete(STORES.items, itemId);
         appState.items = appState.items.filter(i => i.id !== itemId);
 
-        // Delete from Supabase if list is shared
+        // Delete from Supabase (syncs across devices)
         await itemsSync.deleteItem(itemId);
     },
 
